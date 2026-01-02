@@ -1,64 +1,44 @@
-﻿#pragma once
+﻿// Copyright YourCompany. All Rights Reserved.
+
+#pragma once
 
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
-#include "Engine/EngineTypes.h"
-#include "DualNodeAudioRegistry.h"
-#include "Sound/SoundMix.h"   // WICHTIG
-#include "Sound/SoundClass.h" // WICHTIG
+#include "GameplayTagContainer.h"
+#include "Sound/SoundMix.h"
+#include "Sound/SoundClass.h"
 #include "DualNodeAudioSettings.generated.h"
 
-UCLASS(Config=Game, DefaultConfig, meta=(DisplayName="Dual Node Audio"))
+/**
+ * Konfiguration für das DualNode Audio System.
+ * Erscheint in Project Settings -> Game -> Dual Node Audio.
+ */
+UCLASS(Config=Game, defaultconfig, meta=(DisplayName="Dual Node Audio"))
 class DUALNODEAUDIO_API UDualNodeAudioSettings : public UDeveloperSettings
 {
 	GENERATED_BODY()
 
 public:
-	UDualNodeAudioSettings() 
-	{
-		CategoryName = TEXT("Game");
-	}
+	UDualNodeAudioSettings(const FObjectInitializer& ObjectInitializer);
 
-	// --- REGISTRIES ---
-	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "General")
-	TArray<TSoftObjectPtr<UDualNodeAudioRegistry>> Registries;
-
-	// --- MIXING (NEU IN V13.0) ---
-	// Der Master-Mix, der beim Start automatisch gepusht wird.
-	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Mixing")
+	/** Der globale SoundMix, der beim Start geladen werden soll */
+	UPROPERTY(Config, EditAnywhere, Category = "Audio Setup", meta = (AllowedClasses = "/Script/Engine.SoundMix"))
 	TSoftObjectPtr<USoundMix> GlobalSoundMix;
 
-	// Mapping: Welcher Tag gehört zu welcher SoundClass?
-	// Key: "Audio.Type.Music" -> Value: SC_Music
-	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Mixing")
+	/** Mapping von GameplayTags zu Standard SoundClasses */
+	UPROPERTY(Config, EditAnywhere, Category = "Audio Setup")
 	TMap<FGameplayTag, TSoftObjectPtr<USoundClass>> TagToSoundClassDefaults;
 
-	// --- DEBUGGING ---
+	/** Soll eine Warnung ausgegeben werden, wenn Tags fehlen? */
 	UPROPERTY(Config, EditAnywhere, Category = "Debugging")
-	bool bEnableVerboseLogging = false;
+	bool bWarnOnMissingTags;
 
-	UPROPERTY(Config, EditAnywhere, Category = "Debugging")
-	bool bWarnOnMissingTags = true;
+	/** Aktiviert Support für Physics Materials im Audio System */
+	UPROPERTY(Config, EditAnywhere, Category = "Physics Integration")
+	bool bEnablePhysicsMaterialSupport;
 
-	UPROPERTY(Config, EditAnywhere, Category = "Debugging")
-	bool bDrawDebugSpheres = false;
-
-	// --- BEHAVIOR ---
-	UPROPERTY(Config, EditAnywhere, Category = "Behavior")
-	bool bPauseMusicOnGamePause = true;
-
-	UPROPERTY(Config, EditAnywhere, Category = "Behavior")
-	bool bResetStackOnLevelChange = true;
-
-	UPROPERTY(Config, EditAnywhere, Category = "Behavior")
-	bool bEnableServerTimeSync = true;
-
-	// --- PHYSICS ---
-	UPROPERTY(Config, EditAnywhere, Category = "Physics")
-	bool bEnablePhysicsMaterialSupport = true;
-
-	UPROPERTY(Config, EditAnywhere, Category = "Physics", meta=(EditCondition="bEnablePhysicsMaterialSupport"))
-	TEnumAsByte<ECollisionChannel> PhysicsTraceChannel = ECC_Visibility;
-
-	static const UDualNodeAudioSettings* Get() { return GetDefault<UDualNodeAudioSettings>(); }
+#if WITH_EDITOR
+	virtual FText GetSectionText() const override;
+	virtual FName GetCategoryName() const override;
+#endif
 };
