@@ -6,8 +6,8 @@
 #include "DualNodeAudioVolume.generated.h"
 
 /**
- * DNA 10.0: Ambient Volume.
- * Startet Musik/Ambience automatisch beim Betreten und stoppt beim Verlassen.
+ * DNA Ambient Volume.
+ * Automatically triggers music/ambience on overlap. Supports Server & Client logic.
  */
 UCLASS()
 class DUALNODEAUDIO_API ADualNodeAudioVolume : public AVolume
@@ -21,7 +21,6 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	// --- Overlap Events ---
 	UFUNCTION()
 	void OnOverlapBegin(AActor* OverlappedActor, AActor* OtherActor);
 
@@ -29,20 +28,20 @@ protected:
 	void OnOverlapEnd(AActor* OverlappedActor, AActor* OtherActor);
 
 public:
-	// Welchen Musik-Tag soll dieses Volume triggern?
+	// The Music Tag to play (defined in Registry)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dual Node Audio")
 	FGameplayTag AmbientMusicTag;
 
-	// Auf welchem Prioritäts-Slot?
+	// Priority slot for this volume
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dual Node Audio")
 	EDNAMusicPriority Priority = EDNAMusicPriority::Ambient;
 
-	// Overrides für Fade-In/Out
+	// Override default fade/volume settings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dual Node Audio")
 	FDualNodePlaybackSettings PlaybackSettings;
 
-	// Nur für lokalen Spieler? (True = Client Logic, False = Server Logic)
-	// Normalerweise ist Ambience lokal (Client), außer es ist ein geteiltes Event.
+	// If TRUE: Only affects local player (no network traffic). Good for pure ambience.
+	// If FALSE: Server syncs this event to everyone (e.g. Boss Room entry).
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dual Node Audio")
 	bool bClientOnly = true;
 };

@@ -2,11 +2,21 @@
 #include "DualNodeAudioSubsystem.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/GameStateBase.h"
+#include "Net/UnrealNetwork.h"
 
 ADualNodeMusicManager::ADualNodeMusicManager()
 {
 	bReplicates = true;
-	bAlwaysRelevant = true; 
+	bAlwaysRelevant = true; // Wichtig für JIP: Jeder Client muss diesen Actor kennen
+	
+	// Initialisiere leere States für Prio 0 bis 5
+	ActiveMusicStates.SetNum(6);
+}
+
+void ADualNodeMusicManager::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ADualNodeMusicManager, ActiveMusicStates);
 }
 
 // --- SFX ---
@@ -26,96 +36,97 @@ void ADualNodeMusicManager::PlayLocalSound(FGameplayTag Tag, FVector Location, F
 	{
 		if (UDualNodeAudioSubsystem* Subsystem = GI->GetSubsystem<UDualNodeAudioSubsystem>())
 		{
-			FDualNodeSoundDefinition Def;
-			if (Subsystem->GetSoundDefinition(Tag, Def))
-			{
-				// FIX: Soft Pointer laden
-				USoundBase* LoadedSound = nullptr;
-				if (Def.Sound.Get()) LoadedSound = Def.Sound.Get();
-				else LoadedSound = Def.Sound.LoadSynchronous();
-
-				if (LoadedSound)
-				{
-					UGameplayStatics::PlaySoundAtLocation(this, LoadedSound, Location, Rotation, Def.VolumeMultiplier * Volume, Def.PitchMultiplier * Pitch, 0.0f, Def.Attenuation, Def.Concurrency);
-				}
-			}
+			// Async Play via Subsystem
+			Subsystem->PlaySoundAtLocation(this, Tag, Location, Rotation, Volume, Pitch);
 		}
 	}
 }
 
-// --- MUSIC ---
+// --- MUSIC REPLICATION ---
 
 void ADualNodeMusicManager::Server_SetGlobalMusic(EDNAMusicPriority Priority, FGameplayTag Tag, FDualNodePlaybackSettings Settings)
 {
+	int32 Idx = static_cast<int32>(Priority);
+	if (!ActiveMusicStates.IsValidIndex(Idx)) return;
+
 	double Timestamp = GetWorld()->GetTimeSeconds();
 	if (AGameStateBase* GS = GetWorld()->GetGameState())
 	{
 		Timestamp = GS->GetServerWorldTimeSeconds();
 	}
-	Multicast_SetMusicLayer(Priority, Tag, Settings, Timestamp);
+
+	FReplicatedMusicState& State = ActiveMusicStates[Idx];
+	State.Tag = Tag;
+	State.Priority = Priority;
+	State.Settings = Settings;
+	State.ServerTimestamp = Timestamp;
+	State.bIsPaused = false;
+
+	// Server Update Immediately
+	OnRep_MusicStates();
 }
 
 void ADualNodeMusicManager::Server_ClearGlobalMusic(EDNAMusicPriority Priority)
 {
-	Multicast_ClearMusicLayer(Priority);
+	int32 Idx = static_cast<int32>(Priority);
+	if (!ActiveMusicStates.IsValidIndex(Idx)) return;
+
+	// Clear Tag
+	ActiveMusicStates[Idx].Tag = FGameplayTag::EmptyTag;
+	ActiveMusicStates[Idx].bIsPaused = false;
+
+	OnRep_MusicStates();
 }
 
-void ADualNodeMusicManager::Multicast_SetMusicLayer_Implementation(EDNAMusicPriority Priority, FGameplayTag MusicTag, FDualNodePlaybackSettings Settings, double ServerTimestamp)
+void ADualNodeMusicManager::Server_PauseMusic(EDNAMusicPriority Priority)
 {
-	if (UGameInstance* GI = GetGameInstance())
+	int32 Idx = static_cast<int32>(Priority);
+	if (ActiveMusicStates.IsValidIndex(Idx))
 	{
-		if (UDualNodeAudioSubsystem* Sys = GI->GetSubsystem<UDualNodeAudioSubsystem>())
-		{
-			Sys->SetMusicLayer(Priority, MusicTag, Settings, ServerTimestamp);
-		}
+		ActiveMusicStates[Idx].bIsPaused = true;
+		OnRep_MusicStates();
 	}
 }
 
-void ADualNodeMusicManager::Multicast_ClearMusicLayer_Implementation(EDNAMusicPriority Priority)
+void ADualNodeMusicManager::Server_ResumeMusic(EDNAMusicPriority Priority)
 {
-	if (UGameInstance* GI = GetGameInstance())
+	int32 Idx = static_cast<int32>(Priority);
+	if (ActiveMusicStates.IsValidIndex(Idx))
 	{
-		if (UDualNodeAudioSubsystem* Sys = GI->GetSubsystem<UDualNodeAudioSubsystem>())
-		{
-			Sys->ClearMusicLayer(Priority);
-		}
+		ActiveMusicStates[Idx].bIsPaused = false;
+		OnRep_MusicStates();
 	}
 }
 
-void ADualNodeMusicManager::Multicast_PauseMusicLayer_Implementation(EDNAMusicPriority Priority)
+void ADualNodeMusicManager::OnRep_MusicStates()
 {
 	if (UGameInstance* GI = GetGameInstance())
 	{
 		if (UDualNodeAudioSubsystem* Sys = GI->GetSubsystem<UDualNodeAudioSubsystem>())
 		{
-			Sys->PauseMusicLayer(Priority);
-		}
-	}
-}
+			// Wir pushen den gesamten State in das lokale Subsystem
+			// Das Subsystem entscheidet dann, was tatsächlich spielt (höchste Prio)
+			for (const FReplicatedMusicState& State : ActiveMusicStates)
+			{
+				if (State.Priority == EDNAMusicPriority::None) continue;
 
-void ADualNodeMusicManager::Multicast_ResumeMusicLayer_Implementation(EDNAMusicPriority Priority)
-{
-	if (UGameInstance* GI = GetGameInstance())
-	{
-		if (UDualNodeAudioSubsystem* Sys = GI->GetSubsystem<UDualNodeAudioSubsystem>())
-		{
-			Sys->ResumeMusicLayer(Priority);
-		}
-	}
-}
-
-void ADualNodeMusicManager::Server_SkipMusicTrack(EDNAMusicPriority Priority)
-{
-	Multicast_SkipMusicTrack(Priority);
-}
-
-void ADualNodeMusicManager::Multicast_SkipMusicTrack_Implementation(EDNAMusicPriority Priority)
-{
-	if (UGameInstance* GI = GetGameInstance())
-	{
-		if (UDualNodeAudioSubsystem* Sys = GI->GetSubsystem<UDualNodeAudioSubsystem>())
-		{
-			Sys->SkipMusicTrack(Priority);
+				if (State.Tag.IsValid())
+				{
+					Sys->SetMusicLayer(State.Priority, State.Tag, State.Settings, State.ServerTimestamp);
+					if (State.bIsPaused)
+					{
+						Sys->PauseMusicLayer(State.Priority);
+					}
+					else
+					{
+						Sys->ResumeMusicLayer(State.Priority);
+					}
+				}
+				else
+				{
+					Sys->ClearMusicLayer(State.Priority);
+				}
+			}
 		}
 	}
 }

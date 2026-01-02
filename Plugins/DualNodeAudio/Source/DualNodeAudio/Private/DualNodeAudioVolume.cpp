@@ -3,7 +3,6 @@
 #include "Components/BrushComponent.h"
 #include "DualNodeMusicManager.h"
 #include "Kismet/GameplayStatics.h"
-#include "EngineUtils.h"
 
 ADualNodeAudioVolume::ADualNodeAudioVolume()
 {
@@ -32,6 +31,7 @@ void ADualNodeAudioVolume::OnOverlapBegin(AActor* OverlappedActor, AActor* Other
 	APawn* Pawn = Cast<APawn>(OtherActor);
 	if (!Pawn || !Pawn->IsLocallyControlled()) return;
 
+	// CLIENT LOGIC (Lokal)
 	if (bClientOnly)
 	{
 		if (UGameInstance* GI = GetGameInstance())
@@ -42,14 +42,17 @@ void ADualNodeAudioVolume::OnOverlapBegin(AActor* OverlappedActor, AActor* Other
 			}
 		}
 	}
-	else
+	// SERVER LOGIC (Global)
+	else if (HasAuthority())
 	{
-		if (HasAuthority())
+		if (UGameInstance* GI = GetGameInstance())
 		{
-			for (TActorIterator<ADualNodeMusicManager> It(GetWorld()); It; ++It)
+			if (UDualNodeAudioSubsystem* Sys = GI->GetSubsystem<UDualNodeAudioSubsystem>())
 			{
-				It->Multicast_SetMusicLayer(Priority, AmbientMusicTag, PlaybackSettings, GetWorld()->GetTimeSeconds()); 
-				break;
+				if (ADualNodeMusicManager* Manager = Sys->GetOrSpawnMusicManager(this))
+				{
+					Manager->Server_SetGlobalMusic(Priority, AmbientMusicTag, PlaybackSettings);
+				}
 			}
 		}
 	}
@@ -72,14 +75,16 @@ void ADualNodeAudioVolume::OnOverlapEnd(AActor* OverlappedActor, AActor* OtherAc
 			}
 		}
 	}
-	else
+	else if (HasAuthority())
 	{
-		if (HasAuthority())
+		if (UGameInstance* GI = GetGameInstance())
 		{
-			for (TActorIterator<ADualNodeMusicManager> It(GetWorld()); It; ++It)
+			if (UDualNodeAudioSubsystem* Sys = GI->GetSubsystem<UDualNodeAudioSubsystem>())
 			{
-				It->Multicast_ClearMusicLayer(Priority);
-				break;
+				if (ADualNodeMusicManager* Manager = Sys->GetOrSpawnMusicManager(this))
+				{
+					Manager->Server_ClearGlobalMusic(Priority);
+				}
 			}
 		}
 	}

@@ -5,7 +5,7 @@
 #include "Sound/SoundBase.h"
 #include "Sound/SoundAttenuation.h"
 #include "Sound/SoundConcurrency.h"
-#include "Sound/SoundModulationDestination.h" // Für Audio Modulation
+#include "Sound/SoundModulationDestination.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "DualNodeAudioTypes.generated.h"
 
@@ -53,21 +53,19 @@ struct FDualNodePlaybackSettings
 	float StartTime = -1.0f;
 };
 
-// --- STRUCTS: DEFINITIONS (Soft Pointers Update) ---
+// --- STRUCTS: DEFINITIONS ---
 
 USTRUCT(BlueprintType)
 struct FDualNodeSoundDefinition
 {
 	GENERATED_BODY()
 
-	// MEMORY FIX: Soft Object Pointer
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio")
 	TSoftObjectPtr<USoundBase> Sound;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mixing")
 	TObjectPtr<USoundClass> SoundClass = nullptr;
 
-	// MIXING UPDATE: Audio Modulation Class
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mixing")
 	TArray<FSoundModulationDestinationSettings> ModulationSettings;
 
@@ -159,7 +157,7 @@ struct FDualNodeBarkDefinition
 	TObjectPtr<USoundConcurrency> Concurrency = nullptr;
 };
 
-// --- RUNTIME STATE (Active Layers) ---
+// --- RUNTIME STATE ---
 
 USTRUCT(BlueprintType)
 struct FActiveMusicLayer
@@ -181,27 +179,50 @@ struct FActiveMusicLayer
 	UPROPERTY()
 	FDualNodePlaybackSettings ActiveSettings;
 
-	// Playlist State
 	UPROPERTY()
 	int32 PlaylistIndex = 0;
 
-	// SMART SHUFFLE: History (Indexe, die schon gespielt wurden)
 	UPROPERTY()
 	TArray<int32> ShuffleHistory;
 };
 
-// --- SAVEGAME STRUCT (Persistence) ---
+// --- NETWORKING ---
+
+/**
+ * Optimiertes Struct für Netzwerk-Replikation.
+ * Wir replizieren nicht den kompletten Overhead, sondern nur die wichtigen Daten.
+ */
+USTRUCT()
+struct FReplicatedMusicState
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FGameplayTag Tag;
+
+	UPROPERTY()
+	EDNAMusicPriority Priority = EDNAMusicPriority::None;
+
+	UPROPERTY()
+	bool bIsPaused = false;
+
+	UPROPERTY()
+	FDualNodePlaybackSettings Settings;
+
+	UPROPERTY()
+	double ServerTimestamp = 0.0;
+};
+
+// --- SAVEGAME ---
 
 USTRUCT(BlueprintType)
 struct FDNASaveData
 {
 	GENERATED_BODY()
 
-	// Speichert alle aktiven Layer (inkl. Playlist Status & Shuffle History)
 	UPROPERTY(BlueprintReadWrite)
 	TMap<EDNAMusicPriority, FActiveMusicLayer> SavedLayers;
 
-	// Speichert Time of Day
 	UPROPERTY(BlueprintReadWrite)
 	float SavedTimeOfDay = 12.0f;
 };

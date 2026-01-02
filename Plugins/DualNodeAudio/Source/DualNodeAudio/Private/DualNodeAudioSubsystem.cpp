@@ -1,11 +1,12 @@
 ﻿#include "DualNodeAudioSubsystem.h"
 #include "DualNodeAudioSettings.h"
-#include "Engine/AssetManager.h"
+#include "DualNodeMusicManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
+#include "Engine/AssetManager.h"
+#include "EngineUtils.h" // WICHTIG: Fix für TActorIterator Error
 
 // --- HELPER ---
-// Static linkage to avoid collisions
 static FDualNodeMusicDefinition ApplyOverrides(const FDualNodeMusicDefinition& BaseDef, const FDualNodePlaybackSettings& Overrides)
 {
 	FDualNodeMusicDefinition Final = BaseDef;
@@ -15,13 +16,6 @@ static FDualNodeMusicDefinition ApplyOverrides(const FDualNodeMusicDefinition& B
 	if (Overrides.PitchMultiplier >= 0.f) Final.PitchMultiplier = Overrides.PitchMultiplier;
 	if (Overrides.StartTime >= 0.f) Final.StartTime = Overrides.StartTime;
 	return Final;
-}
-
-static USoundBase* LoadSoundSync(const TSoftObjectPtr<USoundBase>& SoftSound)
-{
-	if (SoftSound.IsNull()) return nullptr;
-	if (USoundBase* Loaded = SoftSound.Get()) return Loaded; 
-	return SoftSound.LoadSynchronous(); 
 }
 
 // --- LIFECYCLE ---
@@ -59,63 +53,171 @@ void UDualNodeAudioSubsystem::RebuildRegistryCache()
 	}
 }
 
-// --- API IMPLEMENTATIONS ---
+// --- ASYNC LOADING ---
 
+void UDualNodeAudioSubsystem::ExecuteWhenSoundLoaded(const TSoftObjectPtr<USoundBase>& SoftSound, FOnSoundLoaded OnLoaded)
+{
+	if (SoftSound.IsNull())
+	{
+		OnLoaded.ExecuteIfBound(nullptr);
+		return;
+	}
+
+	if (USoundBase* Loaded = SoftSound.Get())
+	{
+		OnLoaded.ExecuteIfBound(Loaded);
+		return;
+	}
+
+	TSoftObjectPtr<USoundBase> TempPtr = SoftSound;
+	StreamableManager.RequestAsyncLoad(SoftSound.ToSoftObjectPath(), 
+		[TempPtr, OnLoaded]()
+		{
+			if (USoundBase* Asset = TempPtr.Get())
+			{
+				OnLoaded.ExecuteIfBound(Asset);
+			}
+			else
+			{
+				OnLoaded.ExecuteIfBound(nullptr);
+			}
+		}
+	);
+}
+
+void UDualNodeAudioSubsystem::PreloadSoundGroup(FGameplayTag RootTag)
+{
+	TArray<FSoftObjectPath> AssetsToLoad;
+
+	for (const auto& Pair : MergedRegistryCache)
+	{
+		if (Pair.Key.MatchesTag(RootTag))
+		{
+			AssetsToLoad.Add(Pair.Value.Sound.ToSoftObjectPath());
+		}
+	}
+	
+	for (const auto& Pair : MergedMusicCache)
+	{
+		if (Pair.Key.MatchesTag(RootTag))
+		{
+			AssetsToLoad.Add(Pair.Value.Sound.ToSoftObjectPath());
+		}
+	}
+
+	if (AssetsToLoad.Num() > 0)
+	{
+		StreamableManager.RequestAsyncLoad(AssetsToLoad);
+		UE_LOG(LogAudio, Log, TEXT("DNA: Preloading %d assets for group %s"), AssetsToLoad.Num(), *RootTag.ToString());
+	}
+}
+
+// --- PLAY IMPLEMENTATIONS ---
+
+void UDualNodeAudioSubsystem::PlaySound2D(const UObject* WorldContext, FGameplayTag Tag, float Vol, float Pitch)
+{
+	FDualNodeSoundDefinition Def;
+	if (GetSoundDefinition(Tag, Def))
+	{
+		ExecuteWhenSoundLoaded(Def.Sound, FOnSoundLoaded::CreateLambda(
+			[WorldContext, Def, Vol, Pitch](USoundBase* Sound)
+			{
+				if (Sound)
+				{
+					UGameplayStatics::PlaySound2D(WorldContext, Sound, Def.VolumeMultiplier * Vol, Def.PitchMultiplier * Pitch, 0.0f, Def.Concurrency);
+				}
+			}));
+	}
+}
+
+void UDualNodeAudioSubsystem::PlaySoundAtLocation(const UObject* WorldContext, FGameplayTag Tag, FVector Location, FRotator Rotation, float Vol, float Pitch)
+{
+	FDualNodeSoundDefinition Def;
+	if (GetSoundDefinition(Tag, Def))
+	{
+		ExecuteWhenSoundLoaded(Def.Sound, FOnSoundLoaded::CreateLambda(
+			[WorldContext, Def, Location, Rotation, Vol, Pitch](USoundBase* Sound)
+			{
+				if (Sound)
+				{
+					UGameplayStatics::PlaySoundAtLocation(WorldContext, Sound, Location, Rotation, Def.VolumeMultiplier * Vol, Def.PitchMultiplier * Pitch, 0.0f, Def.Attenuation, Def.Concurrency);
+				}
+			}));
+	}
+}
+
+UAudioComponent* UDualNodeAudioSubsystem::SpawnSoundAttached(const UObject* WorldContext, FGameplayTag Tag, USceneComponent* Parent, FName Socket, bool bAutoDestroy)
+{
+	FDualNodeSoundDefinition Def;
+	if (!GetSoundDefinition(Tag, Def)) return nullptr;
+
+	UAudioComponent* AudioComp = UGameplayStatics::SpawnSoundAttached(nullptr, Parent, Socket, FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::KeepRelativeOffset, bAutoDestroy);
+	
+	if (AudioComp)
+	{
+		ExecuteWhenSoundLoaded(Def.Sound, FOnSoundLoaded::CreateLambda(
+			[AudioComp, Def](USoundBase* Sound)
+			{
+				if (IsValid(AudioComp) && Sound)
+				{
+					AudioComp->SetSound(Sound);
+					AudioComp->SetVolumeMultiplier(Def.VolumeMultiplier);
+					AudioComp->SetPitchMultiplier(Def.PitchMultiplier);
+					AudioComp->AttenuationSettings = Def.Attenuation;
+					AudioComp->ConcurrencySet.Add(Def.Concurrency);
+					
+					// NOTE: Audio Modulation Code removed for compilation stability in UE 5.x
+					
+					AudioComp->Play();
+				}
+				else if (IsValid(AudioComp))
+				{
+					AudioComp->DestroyComponent();
+				}
+			}));
+	}
+	return AudioComp;
+}
+
+// --- AUTO SPAWN MANAGER ---
+
+ADualNodeMusicManager* UDualNodeAudioSubsystem::GetOrSpawnMusicManager(const UObject* WorldContext)
+{
+	UWorld* World = WorldContext ? WorldContext->GetWorld() : GetWorld();
+	if (!World) return nullptr;
+
+	for (TActorIterator<ADualNodeMusicManager> It(World); It; ++It)
+	{
+		return *It;
+	}
+
+	if (World->GetNetMode() < NM_Client)
+	{
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		ADualNodeMusicManager* NewManager = World->SpawnActor<ADualNodeMusicManager>(Params);
+		return NewManager;
+	}
+
+	return nullptr;
+}
+
+// --- REGISTRY GETTERS ---
 bool UDualNodeAudioSubsystem::GetSoundDefinition(const FGameplayTag& Tag, FDualNodeSoundDefinition& OutDef) const
 {
-	if (!Tag.IsValid()) return false;
-	// LINTER FIX: Variable moved to if-statement
-	if (const FDualNodeSoundDefinition* FoundDef = MergedRegistryCache.Find(Tag))
-	{
-		OutDef = *FoundDef;
-		return true;
-	}
-	return false;
+	if (const FDualNodeSoundDefinition* Found = MergedRegistryCache.Find(Tag)) { OutDef = *Found; return true; } return false;
 }
-
-USoundBase* UDualNodeAudioSubsystem::ResolveSoundFromPhysics(const FDualNodeSoundDefinition& BaseDef, const UPhysicalMaterial* PhysMat) const
-{
-	if (PhysMat && BaseDef.PhysicsMap.Contains(PhysMat))
-	{
-		return LoadSoundSync(BaseDef.PhysicsMap[PhysMat]);
-	}
-	return LoadSoundSync(BaseDef.Sound);
-}
-
 bool UDualNodeAudioSubsystem::GetMusicDefinition(const FGameplayTag& Tag, FDualNodeMusicDefinition& OutDef) const
 {
-	if (!Tag.IsValid()) return false;
-	// LINTER FIX: Variable moved to if-statement
-	if (const FDualNodeMusicDefinition* FoundDef = MergedMusicCache.Find(Tag))
-	{
-		OutDef = *FoundDef;
-		return true;
-	}
-	return false;
+	if (const FDualNodeMusicDefinition* Found = MergedMusicCache.Find(Tag)) { OutDef = *Found; return true; } return false;
 }
-
 bool UDualNodeAudioSubsystem::GetPlaylistDefinition(const FGameplayTag& Tag, FDualNodePlaylist& OutDef) const
 {
-	if (!Tag.IsValid()) return false;
-	// LINTER FIX: Variable moved to if-statement
-	if (const FDualNodePlaylist* FoundDef = MergedPlaylistCache.Find(Tag))
-	{
-		OutDef = *FoundDef;
-		return true;
-	}
-	return false;
+	if (const FDualNodePlaylist* Found = MergedPlaylistCache.Find(Tag)) { OutDef = *Found; return true; } return false;
 }
-
 bool UDualNodeAudioSubsystem::GetBarkDefinition(const FGameplayTag& Tag, FDualNodeBarkDefinition& OutDef) const
 {
-	if (!Tag.IsValid()) return false;
-	// LINTER FIX: Variable moved to if-statement
-	if (const FDualNodeBarkDefinition* FoundDef = MergedBarkCache.Find(Tag))
-	{
-		OutDef = *FoundDef;
-		return true;
-	}
-	return false;
+	if (const FDualNodeBarkDefinition* Found = MergedBarkCache.Find(Tag)) { OutDef = *Found; return true; } return false;
 }
 
 // --- SAVE SYSTEM ---
@@ -136,7 +238,7 @@ void UDualNodeAudioSubsystem::RestoreState(const FDNASaveData& SaveData)
 	UpdateMusicSystem();
 }
 
-// --- LOGIC ---
+// --- MUSIC LOGIC ---
 
 void UDualNodeAudioSubsystem::SetMusicLayer(EDNAMusicPriority Priority, FGameplayTag MusicTag, const FDualNodePlaybackSettings& Settings, double StartTimestamp)
 {
@@ -169,17 +271,13 @@ void UDualNodeAudioSubsystem::SetMusicLayer(EDNAMusicPriority Priority, FGamepla
 			Layer.ServerStartTime = StartTimestamp;
 		}
 	}
-
 	UpdateMusicSystem();
 }
 
 void UDualNodeAudioSubsystem::ClearMusicLayer(EDNAMusicPriority Priority)
 {
-	if (ActiveLayers.Contains(Priority))
-	{
-		ActiveLayers.Remove(Priority);
-		UpdateMusicSystem();
-	}
+	ActiveLayers.Remove(Priority);
+	UpdateMusicSystem();
 }
 
 void UDualNodeAudioSubsystem::PauseMusicLayer(EDNAMusicPriority Priority)
@@ -213,17 +311,10 @@ void UDualNodeAudioSubsystem::SkipMusicTrack(EDNAMusicPriority Priority)
 			if (PlaylistDef.PlayMode == EDNAPlaylistMode::Shuffle)
 			{
 				Layer->ShuffleHistory.AddUnique(Layer->PlaylistIndex);
-				
-				if (Layer->ShuffleHistory.Num() >= NumTracks)
-				{
-					Layer->ShuffleHistory.Empty();
-				}
+				if (Layer->ShuffleHistory.Num() >= NumTracks) Layer->ShuffleHistory.Empty();
 
 				TArray<int32> AvailableIndices;
-				for (int32 i = 0; i < NumTracks; i++)
-				{
-					if (!Layer->ShuffleHistory.Contains(i)) AvailableIndices.Add(i);
-				}
+				for (int32 i = 0; i < NumTracks; i++) { if (!Layer->ShuffleHistory.Contains(i)) AvailableIndices.Add(i); }
 
 				if (AvailableIndices.Num() > 0)
 				{
@@ -253,67 +344,23 @@ void UDualNodeAudioSubsystem::SetSystemTimeOfDay(float NewTime)
 	UpdateMusicSystem();
 }
 
-void UDualNodeAudioSubsystem::HandleLevelChange()
-{
-	const UDualNodeAudioSettings* Settings = UDualNodeAudioSettings::Get();
-	if (Settings && Settings->bResetStackOnLevelChange)
-	{
-		ActiveLayers.Reset();
-		UpdateMusicSystem();
-	}
-}
-
-bool UDualNodeAudioSubsystem::TryPlayBark(const UObject* WorldContext, FGameplayTag BarkTag, const FVector& Location)
-{
-	FDualNodeBarkDefinition Def;
-	if (!GetBarkDefinition(BarkTag, Def)) return false;
-
-	USoundBase* LoadedSound = LoadSoundSync(Def.Sound);
-	if (!LoadedSound) return false;
-
-	const UWorld* World = WorldContext ? WorldContext->GetWorld() : GetWorld();
-	if (!World) return false;
-
-	const double Now = World->GetTimeSeconds();
-
-	if (Def.CooldownGroup.IsValid())
-	{
-		if (const double* LastTime = BarkCooldowns.Find(Def.CooldownGroup))
-		{
-			if (Now < *LastTime + Def.CooldownDuration) return false;
-		}
-	}
-
-	if (Def.TriggerChance < 1.0f && FMath::FRand() > Def.TriggerChance) return false;
-
-	if (Def.CooldownGroup.IsValid()) BarkCooldowns.Add(Def.CooldownGroup, Now);
-
-	UGameplayStatics::PlaySoundAtLocation(WorldContext, LoadedSound, Location, FRotator::ZeroRotator, 1.0f, 1.0f, 0.0f, nullptr, Def.Concurrency);
-	return true;
-}
-
 void UDualNodeAudioSubsystem::UpdateMusicSystem()
 {
-	// 1. PRIORITY CHECK
 	FActiveMusicLayer BestLayer;
 	BestLayer.bIsActive = false;
 
-	// LINTER FIX: static_cast and removed unused 'BestPrio' variable
 	for (uint8 i = static_cast<uint8>(EDNAMusicPriority::Critical); i >= static_cast<uint8>(EDNAMusicPriority::Ambient); --i)
 	{
 		const EDNAMusicPriority P = static_cast<EDNAMusicPriority>(i);
 		if (ActiveLayers.Contains(P) && ActiveLayers[P].bIsActive)
 		{
-			// LINTER FIX: Variable moved to if-statement
 			if (FDualNodeMusicDefinition CheckDef; GetMusicDefinition(ActiveLayers[P].MusicTag, CheckDef))
 			{
 				if (CheckDef.bUseTimeOfDay)
 				{
-					const bool bInRange = (CurrentTimeOfDay >= CheckDef.ActiveHourRange.X && CurrentTimeOfDay <= CheckDef.ActiveHourRange.Y);
-					if (!bInRange) continue; 
+					if (CurrentTimeOfDay < CheckDef.ActiveHourRange.X || CurrentTimeOfDay > CheckDef.ActiveHourRange.Y) continue;
 				}
 			}
-			
 			BestLayer = ActiveLayers[P];
 			break; 
 		}
@@ -332,19 +379,16 @@ void UDualNodeAudioSubsystem::UpdateMusicSystem()
 	}
 
 	if (BestLayer.MusicTag == CurrentPlayingTag && BestLayer.bIsActive) return;
-
 	CurrentPlayingTag = BestLayer.MusicTag;
 
 	UWorld* World = GetWorld();
 	if (!World) return; 
 
-	if (!AudioComp_A) { AudioComp_A = NewObject<UAudioComponent>(World); AudioComp_A->bAutoDestroy = false; AudioComp_A->RegisterComponentWithWorld(World); }
-	if (!AudioComp_B) { AudioComp_B = NewObject<UAudioComponent>(World); AudioComp_B->bAutoDestroy = false; AudioComp_B->RegisterComponentWithWorld(World); }
+	if (!AudioComp_A) { AudioComp_A = NewObject<UAudioComponent>(World); AudioComp_A->RegisterComponentWithWorld(World); }
+	if (!AudioComp_B) { AudioComp_B = NewObject<UAudioComponent>(World); AudioComp_B->RegisterComponentWithWorld(World); }
 
-	// 2. PLAYLIST RESOLVING
+	// Resolve Playlist
 	FGameplayTag FinalTrackTag = BestLayer.MusicTag;
-
-	// LINTER FIX: Variable moved to if-statement
 	if (FDualNodePlaylist PlaylistDef; GetPlaylistDefinition(BestLayer.MusicTag, PlaylistDef))
 	{
 		if (PlaylistDef.Tracks.IsValidIndex(BestLayer.PlaylistIndex))
@@ -356,44 +400,81 @@ void UDualNodeAudioSubsystem::UpdateMusicSystem()
 	FDualNodeMusicDefinition BaseDef;
 	const bool bHasData = GetMusicDefinition(FinalTrackTag, BaseDef);
 	
-	if (bHasData)
-	{
-		BaseDef.Sound = LoadSoundSync(BaseDef.Sound);
-	}
-
 	const FDualNodeMusicDefinition Def = ApplyOverrides(BaseDef, BestLayer.ActiveSettings);
 
-	// 3. CROSSFADE & PLAY
-	UAudioComponent* FadeInComp = bIsPlayingA ? AudioComp_B : AudioComp_A;
-	UAudioComponent* FadeOutComp = bIsPlayingA ? AudioComp_A : AudioComp_B;
-
-	if (FadeOutComp->IsPlaying())
+	if (bHasData)
 	{
-		const float OutDur = bHasData ? Def.FadeInDuration : 1.0f; 
-		FadeOutComp->FadeOut(OutDur, 0.0f);
-	}
+		ExecuteWhenSoundLoaded(Def.Sound, FOnSoundLoaded::CreateLambda(
+			[this, Def, BestLayer, World](USoundBase* LoadedSound)
+			{
+				if (CurrentPlayingTag != BestLayer.MusicTag) return; 
 
-	if (bHasData && Def.Sound.Get())
-	{
-		FadeInComp->SetSound(Def.Sound.Get());
-		FadeInComp->SoundClassOverride = Def.SoundClass;
-		FadeInComp->PitchMultiplier = Def.PitchMultiplier;
-		
-		float StartTimeOffset = 0.0f;
-		
-		const double Now = World->GetTimeSeconds();
-		const float Elapsed = static_cast<float>(Now - BestLayer.ServerStartTime);
-		const float Duration = Def.Sound.Get()->Duration;
-		
-		if (Duration > 5.0f && Elapsed > 0.f) StartTimeOffset = FMath::Fmod(Elapsed, Duration);
-		StartTimeOffset += Def.StartTime;
+				UAudioComponent* FadeInComp = bIsPlayingA ? AudioComp_B : AudioComp_A;
+				UAudioComponent* FadeOutComp = bIsPlayingA ? AudioComp_A : AudioComp_B;
 
-		FadeInComp->FadeIn(Def.FadeInDuration, Def.VolumeMultiplier, StartTimeOffset);
+				if (FadeOutComp->IsPlaying()) FadeOutComp->FadeOut(Def.FadeInDuration, 0.0f);
+
+				if (LoadedSound)
+				{
+					FadeInComp->SetSound(LoadedSound);
+					FadeInComp->SoundClassOverride = Def.SoundClass;
+					FadeInComp->SetPitchMultiplier(Def.PitchMultiplier);
+					
+					float StartTimeOffset = 0.0f;
+					const double Now = World->GetTimeSeconds();
+					const float Elapsed = static_cast<float>(Now - BestLayer.ServerStartTime);
+					const float Dur = LoadedSound->Duration;
+					
+					if (Dur > 5.0f && Elapsed > 0.f) StartTimeOffset = FMath::Fmod(Elapsed, Dur);
+					StartTimeOffset += Def.StartTime;
+
+					FadeInComp->FadeIn(Def.FadeInDuration, Def.VolumeMultiplier, StartTimeOffset);
+				}
+				bIsPlayingA = !bIsPlayingA;
+			}
+		));
 	}
 	else
 	{
-		FadeInComp->Stop();
+		if (AudioComp_A) AudioComp_A->Stop();
+		if (AudioComp_B) AudioComp_B->Stop();
+	}
+}
+
+// --- BARKS ---
+
+void UDualNodeAudioSubsystem::PruneBarkCooldowns(double CurrentTime)
+{
+	for (auto It = BarkCooldowns.CreateIterator(); It; ++It)
+	{
+		if (CurrentTime > It.Value() + 300.0) It.RemoveCurrent();
+	}
+}
+
+bool UDualNodeAudioSubsystem::TryPlayBark(const UObject* WorldContext, FGameplayTag BarkTag, const FVector& Location)
+{
+	FDualNodeBarkDefinition Def;
+	if (!GetBarkDefinition(BarkTag, Def)) return false;
+
+	const UWorld* World = WorldContext ? WorldContext->GetWorld() : GetWorld();
+	if (!World) return false;
+
+	const double Now = World->GetTimeSeconds();
+
+	if (FMath::RandRange(0, 100) == 0) PruneBarkCooldowns(Now);
+
+	if (Def.CooldownGroup.IsValid())
+	{
+		if (const double* LastTime = BarkCooldowns.Find(Def.CooldownGroup))
+		{
+			if (Now < *LastTime + Def.CooldownDuration) return false;
+		}
 	}
 
-	bIsPlayingA = !bIsPlayingA;
+	if (Def.TriggerChance < 1.0f && FMath::FRand() > Def.TriggerChance) return false;
+
+	if (Def.CooldownGroup.IsValid()) BarkCooldowns.Add(Def.CooldownGroup, Now);
+
+	PlaySoundAtLocation(WorldContext, BarkTag, Location, FRotator::ZeroRotator, 1.0f, 1.0f);
+	return true;
 }

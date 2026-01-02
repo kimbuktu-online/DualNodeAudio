@@ -13,43 +13,38 @@ class DUALNODEAUDIO_API ADualNodeMusicManager : public AActor
 public:	
 	ADualNodeMusicManager();
 
-	// --- SFX RPCs ---
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	// --- SFX RPCs (Bleiben RPCs, da "Fire-and-Forget") ---
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlaySoundAtLocation(FGameplayTag SoundTag, FVector Location, FRotator Rotation, float VolumeMult, float PitchMult);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastPlaySoundAtLocation_Reliable(FGameplayTag SoundTag, FVector Location, FRotator Rotation, float VolumeMult, float PitchMult);
 
-	// --- GLOBAL MUSIC RPCs ---
+	// --- GLOBAL MUSIC STATE (Neu: Replicated Variable) ---
 	
-	// FIX: Settings Parameter hinzugefügt
-	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_SetMusicLayer(EDNAMusicPriority Priority, FGameplayTag MusicTag, FDualNodePlaybackSettings Settings, double ServerTimestamp);
-
-	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_ClearMusicLayer(EDNAMusicPriority Priority);
-
-	// FIX: Neue Pause/Resume RPCs hinzugefügt
-	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_PauseMusicLayer(EDNAMusicPriority Priority);
-
-	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_ResumeMusicLayer(EDNAMusicPriority Priority);
-
-	UFUNCTION(NetMulticast, Reliable)
-	void Multicast_SkipMusicTrack(EDNAMusicPriority Priority);
-
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Dual Node Audio|Music")
-	void Server_SkipMusicTrack(EDNAMusicPriority Priority);
-
-	// Server Helper für Blueprints
-	// FIX: Settings Parameter hinzugefügt
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Dual Node Audio|Music")
 	void Server_SetGlobalMusic(EDNAMusicPriority Priority, FGameplayTag Tag, FDualNodePlaybackSettings Settings);
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Dual Node Audio|Music")
 	void Server_ClearGlobalMusic(EDNAMusicPriority Priority);
 
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Dual Node Audio|Music")
+	void Server_PauseMusic(EDNAMusicPriority Priority);
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Dual Node Audio|Music")
+	void Server_ResumeMusic(EDNAMusicPriority Priority);
+
 protected:
+	// Array of Replicated States (Index = Priority)
+	// Wir nutzen ein fixes Array für die Prioritäten 1-5, um Overhead zu sparen.
+	// Index 0 ist Dummy.
+	UPROPERTY(ReplicatedUsing = OnRep_MusicStates)
+	TArray<FReplicatedMusicState> ActiveMusicStates;
+
+	UFUNCTION()
+	void OnRep_MusicStates();
+
 	void PlayLocalSound(FGameplayTag Tag, FVector Location, FRotator Rotation, float Volume, float Pitch);
 };
