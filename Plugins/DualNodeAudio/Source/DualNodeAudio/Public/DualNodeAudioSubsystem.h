@@ -10,7 +10,6 @@
 class ADualNodeMusicManager;
 struct FDualNodeAudioRegistry;
 
-// Delegate für Async Loading
 DECLARE_DELEGATE_OneParam(FOnSoundLoaded, USoundBase*);
 
 UCLASS()
@@ -28,15 +27,26 @@ public:
 	bool GetPlaylistDefinition(const FGameplayTag& Tag, FDualNodePlaylist& OutDef) const;
 	bool GetBarkDefinition(const FGameplayTag& Tag, FDualNodeBarkDefinition& OutDef) const;
 
+	// FIX: Wiederhergestellt für Physics Support
+	// Gibt SoftPointer zurück für Async Loading
+	TSoftObjectPtr<USoundBase> ResolveSoundFromPhysics(const FDualNodeSoundDefinition& BaseDef, const UPhysicalMaterial* PhysMat) const;
+
+	// --- MIXING API ---
+	void SetVolumeByClassTag(FGameplayTag ClassTag, float Volume, float FadeTime = 0.5f);
+	void MuteClassTag(FGameplayTag ClassTag, bool bMuted, float FadeTime = 0.5f);
+	void PushGlobalMix();
+
 	// --- ASYNC HELPER ---
 	void ExecuteWhenSoundLoaded(const TSoftObjectPtr<USoundBase>& SoftSound, FOnSoundLoaded OnLoaded);
-	
-	// FIX: Diese Funktion fehlte in der Deklaration
 	void PreloadSoundGroup(FGameplayTag RootTag);
 
-	// --- PLAY API (Async Safe) ---
+	// --- PLAY API ---
 	void PlaySound2D(const UObject* WorldContext, FGameplayTag Tag, float Vol, float Pitch);
 	void PlaySoundAtLocation(const UObject* WorldContext, FGameplayTag Tag, FVector Location, FRotator Rotation, float Vol, float Pitch);
+	
+	// FIX: Neue Overload für direktes Asset-Abspielen (wichtig für Foley/Physics)
+	void PlaySoundAtLocation(const UObject* WorldContext, TSoftObjectPtr<USoundBase> SoundToPlay, FVector Location, FRotator Rotation, float Vol, float Pitch, const FDualNodeSoundDefinition* OptionalDefSettings = nullptr);
+
 	UAudioComponent* SpawnSoundAttached(const UObject* WorldContext, FGameplayTag Tag, USceneComponent* Parent, FName Socket, bool bAutoDestroy);
 
 	// --- MUSIC CONTROL ---
@@ -44,13 +54,9 @@ public:
 	void ClearMusicLayer(EDNAMusicPriority Priority);
 	void PauseMusicLayer(EDNAMusicPriority Priority);
 	void ResumeMusicLayer(EDNAMusicPriority Priority);
-	
-	// FIX: Diese Funktion fehlte in der Deklaration
 	void SkipMusicTrack(EDNAMusicPriority Priority);
 	
-	// Server Helper: Findet oder spawnt den Manager
 	ADualNodeMusicManager* GetOrSpawnMusicManager(const UObject* WorldContext);
-
 	void SetSystemTimeOfDay(float NewTime);
 	bool TryPlayBark(const UObject* WorldContext, FGameplayTag BarkTag, const FVector& Location);
 
@@ -62,10 +68,7 @@ public:
 	void RestoreState(const FDNASaveData& SaveData);
 
 private:
-	// --- CORE ---
 	void RebuildRegistryCache();
-	
-	// FIX: StreamableManager muss hier deklariert sein
 	FStreamableManager StreamableManager;
 
 	UPROPERTY(Transient) TMap<FGameplayTag, FDualNodeSoundDefinition> MergedRegistryCache;
@@ -73,7 +76,6 @@ private:
 	UPROPERTY(Transient) TMap<FGameplayTag, FDualNodePlaylist> MergedPlaylistCache;
 	UPROPERTY(Transient) TMap<FGameplayTag, FDualNodeBarkDefinition> MergedBarkCache;
 
-	// --- MUSIC STATE ---
 	void UpdateMusicSystem();
 	
 	UPROPERTY() TMap<EDNAMusicPriority, FActiveMusicLayer> ActiveLayers;
@@ -84,7 +86,6 @@ private:
 
 	float CurrentTimeOfDay = 12.0f; 
 	
-	// --- BARK MANAGEMENT ---
 	UPROPERTY() TMap<FGameplayTag, double> BarkCooldowns;
 	void PruneBarkCooldowns(double CurrentTime);
 };

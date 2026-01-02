@@ -16,6 +16,25 @@ UDualNodeAudioSubsystem* GetDNASubsystem(const UObject* WorldContext)
 	return nullptr;
 }
 
+// --- MIXING IMPLS (V13.0) ---
+
+void UDualNodeAudioLibrary::SetVolumeByClassTag(const UObject* WorldContextObject, FGameplayTag ClassTag, float Volume, float FadeTime)
+{
+	if (UDualNodeAudioSubsystem* Sys = GetDNASubsystem(WorldContextObject))
+	{
+		Sys->SetVolumeByClassTag(ClassTag, Volume, FadeTime);
+	}
+}
+
+void UDualNodeAudioLibrary::MuteClassTag(const UObject* WorldContextObject, FGameplayTag ClassTag, bool bMuted, float FadeTime)
+{
+	if (UDualNodeAudioSubsystem* Sys = GetDNASubsystem(WorldContextObject))
+	{
+		Sys->MuteClassTag(ClassTag, bMuted, FadeTime);
+	}
+}
+
+
 // --- NEW FEATURES ---
 
 void UDualNodeAudioLibrary::PreloadSoundGroup(const UObject* WorldContextObject, FGameplayTag RootTag)
@@ -39,7 +58,7 @@ void UDualNodeAudioLibrary::DebugAudioState(const UObject* WorldContextObject)
 	}
 }
 
-// --- STANDARD IMPLS (Updated with Subsystem calls) ---
+// --- STANDARD IMPLS (Standard, Unchanged) ---
 
 void UDualNodeAudioLibrary::PlaySoundByTag_2D(const UObject* WorldContextObject, FGameplayTag Tag, float VolumeMultiplier, float PitchMultiplier)
 {
@@ -59,8 +78,6 @@ void UDualNodeAudioLibrary::PlaySoundByTag_AtLocation(const UObject* WorldContex
 
 void UDualNodeAudioLibrary::PlaySoundByTag_WithPhysics(const UObject* WorldContextObject, FGameplayTag Tag, FHitResult Hit, float VolumeMultiplier, float PitchMultiplier)
 {
-	// Logic ausgelagert ans Subsystem oder hier lassen
-	// Einfachheitshalber: Ruft Standard AtLocation auf, physics resolving muss im Subsystem passieren
 	if (UDualNodeAudioSubsystem* Sys = GetDNASubsystem(WorldContextObject))
 	{
 		// Hier müsste ResolveSoundFromPhysics Logic rein, oder neue Subsystem Funktion.

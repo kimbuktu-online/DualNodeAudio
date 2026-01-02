@@ -4,7 +4,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "Engine/AssetManager.h"
-#include "EngineUtils.h" // WICHTIG: Fix für TActorIterator Error
+#include "EngineUtils.h"
 
 // --- HELPER ---
 static FDualNodeMusicDefinition ApplyOverrides(const FDualNodeMusicDefinition& BaseDef, const FDualNodePlaybackSettings& Overrides)
@@ -24,6 +24,7 @@ void UDualNodeAudioSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 	RebuildRegistryCache();
+	PushGlobalMix();
 }
 
 void UDualNodeAudioSubsystem::Deinitialize()
@@ -51,6 +52,66 @@ void UDualNodeAudioSubsystem::RebuildRegistryCache()
 			MergedBarkCache.Append(Registry->BarkDatabase);
 		}
 	}
+}
+
+// --- PHYSICS RESOLVER (FIX) ---
+
+TSoftObjectPtr<USoundBase> UDualNodeAudioSubsystem::ResolveSoundFromPhysics(const FDualNodeSoundDefinition& BaseDef, const UPhysicalMaterial* PhysMat) const
+{
+	// Wenn ein Physics Material da ist und in der Map existiert -> nimm das.
+	if (PhysMat && BaseDef.PhysicsMap.Contains(PhysMat))
+	{
+		return BaseDef.PhysicsMap[PhysMat];
+	}
+	// Sonst Default Sound
+	return BaseDef.Sound;
+}
+
+// --- MIXING API ---
+
+void UDualNodeAudioSubsystem::PushGlobalMix()
+{
+	if (const UDualNodeAudioSettings* Settings = UDualNodeAudioSettings::Get())
+	{
+		if (USoundMix* Mix = Settings->GlobalSoundMix.LoadSynchronous())
+		{
+			UGameplayStatics::PushSoundMixModifier(GetWorld(), Mix);
+		}
+	}
+}
+
+void UDualNodeAudioSubsystem::SetVolumeByClassTag(FGameplayTag ClassTag, float Volume, float FadeTime)
+{
+	const UDualNodeAudioSettings* Settings = UDualNodeAudioSettings::Get();
+	if (!Settings) return;
+
+	const TSoftObjectPtr<USoundClass>* FoundClassPtr = Settings->TagToSoundClassDefaults.Find(ClassTag);
+	
+	if (!FoundClassPtr)
+	{
+		FGameplayTag Parent = ClassTag.RequestDirectParent();
+		while (Parent.IsValid() && !FoundClassPtr)
+		{
+			FoundClassPtr = Settings->TagToSoundClassDefaults.Find(Parent);
+			Parent = Parent.RequestDirectParent();
+		}
+	}
+
+	if (FoundClassPtr)
+	{
+		if (USoundClass* SC = FoundClassPtr->LoadSynchronous())
+		{
+			if (USoundMix* GlobalMix = Settings->GlobalSoundMix.LoadSynchronous())
+			{
+				UGameplayStatics::SetSoundMixClassOverride(GetWorld(), GlobalMix, SC, Volume, 1.0f, FadeTime, true);
+			}
+		}
+	}
+}
+
+void UDualNodeAudioSubsystem::MuteClassTag(FGameplayTag ClassTag, bool bMuted, float FadeTime)
+{
+	SetVolumeByClassTag(ClassTag, bMuted ? 0.0f : 1.0f, FadeTime);
 }
 
 // --- ASYNC LOADING ---
@@ -91,18 +152,11 @@ void UDualNodeAudioSubsystem::PreloadSoundGroup(FGameplayTag RootTag)
 
 	for (const auto& Pair : MergedRegistryCache)
 	{
-		if (Pair.Key.MatchesTag(RootTag))
-		{
-			AssetsToLoad.Add(Pair.Value.Sound.ToSoftObjectPath());
-		}
+		if (Pair.Key.MatchesTag(RootTag)) AssetsToLoad.Add(Pair.Value.Sound.ToSoftObjectPath());
 	}
-	
 	for (const auto& Pair : MergedMusicCache)
 	{
-		if (Pair.Key.MatchesTag(RootTag))
-		{
-			AssetsToLoad.Add(Pair.Value.Sound.ToSoftObjectPath());
-		}
+		if (Pair.Key.MatchesTag(RootTag)) AssetsToLoad.Add(Pair.Value.Sound.ToSoftObjectPath());
 	}
 
 	if (AssetsToLoad.Num() > 0)
@@ -119,14 +173,8 @@ void UDualNodeAudioSubsystem::PlaySound2D(const UObject* WorldContext, FGameplay
 	FDualNodeSoundDefinition Def;
 	if (GetSoundDefinition(Tag, Def))
 	{
-		ExecuteWhenSoundLoaded(Def.Sound, FOnSoundLoaded::CreateLambda(
-			[WorldContext, Def, Vol, Pitch](USoundBase* Sound)
-			{
-				if (Sound)
-				{
-					UGameplayStatics::PlaySound2D(WorldContext, Sound, Def.VolumeMultiplier * Vol, Def.PitchMultiplier * Pitch, 0.0f, Def.Concurrency);
-				}
-			}));
+		// Hier nutzen wir direkt die neue interne Play-Funktion
+		PlaySoundAtLocation(WorldContext, Def.Sound, FVector::ZeroVector, FRotator::ZeroRotator, Vol, Pitch, &Def);
 	}
 }
 
@@ -135,15 +183,35 @@ void UDualNodeAudioSubsystem::PlaySoundAtLocation(const UObject* WorldContext, F
 	FDualNodeSoundDefinition Def;
 	if (GetSoundDefinition(Tag, Def))
 	{
-		ExecuteWhenSoundLoaded(Def.Sound, FOnSoundLoaded::CreateLambda(
-			[WorldContext, Def, Location, Rotation, Vol, Pitch](USoundBase* Sound)
-			{
-				if (Sound)
-				{
-					UGameplayStatics::PlaySoundAtLocation(WorldContext, Sound, Location, Rotation, Def.VolumeMultiplier * Vol, Def.PitchMultiplier * Pitch, 0.0f, Def.Attenuation, Def.Concurrency);
-				}
-			}));
+		PlaySoundAtLocation(WorldContext, Def.Sound, Location, Rotation, Vol, Pitch, &Def);
 	}
+}
+
+// Neue Overload Implementation
+void UDualNodeAudioSubsystem::PlaySoundAtLocation(const UObject* WorldContext, TSoftObjectPtr<USoundBase> SoundToPlay, FVector Location, FRotator Rotation, float Vol, float Pitch, const FDualNodeSoundDefinition* OptionalDefSettings)
+{
+	// Kopiere Settings wenn vorhanden, sonst Defaults
+	float FinalVol = Vol;
+	float FinalPitch = Pitch;
+	USoundConcurrency* Concurrency = nullptr;
+	USoundAttenuation* Attenuation = nullptr;
+
+	if (OptionalDefSettings)
+	{
+		FinalVol *= OptionalDefSettings->VolumeMultiplier;
+		FinalPitch *= OptionalDefSettings->PitchMultiplier;
+		Concurrency = OptionalDefSettings->Concurrency;
+		Attenuation = OptionalDefSettings->Attenuation;
+	}
+
+	ExecuteWhenSoundLoaded(SoundToPlay, FOnSoundLoaded::CreateLambda(
+		[WorldContext, Location, Rotation, FinalVol, FinalPitch, Concurrency, Attenuation](USoundBase* Sound)
+		{
+			if (Sound)
+			{
+				UGameplayStatics::PlaySoundAtLocation(WorldContext, Sound, Location, Rotation, FinalVol, FinalPitch, 0.0f, Attenuation, Concurrency);
+			}
+		}));
 }
 
 UAudioComponent* UDualNodeAudioSubsystem::SpawnSoundAttached(const UObject* WorldContext, FGameplayTag Tag, USceneComponent* Parent, FName Socket, bool bAutoDestroy)
@@ -165,9 +233,6 @@ UAudioComponent* UDualNodeAudioSubsystem::SpawnSoundAttached(const UObject* Worl
 					AudioComp->SetPitchMultiplier(Def.PitchMultiplier);
 					AudioComp->AttenuationSettings = Def.Attenuation;
 					AudioComp->ConcurrencySet.Add(Def.Concurrency);
-					
-					// NOTE: Audio Modulation Code removed for compilation stability in UE 5.x
-					
 					AudioComp->Play();
 				}
 				else if (IsValid(AudioComp))
@@ -387,7 +452,6 @@ void UDualNodeAudioSubsystem::UpdateMusicSystem()
 	if (!AudioComp_A) { AudioComp_A = NewObject<UAudioComponent>(World); AudioComp_A->RegisterComponentWithWorld(World); }
 	if (!AudioComp_B) { AudioComp_B = NewObject<UAudioComponent>(World); AudioComp_B->RegisterComponentWithWorld(World); }
 
-	// Resolve Playlist
 	FGameplayTag FinalTrackTag = BestLayer.MusicTag;
 	if (FDualNodePlaylist PlaylistDef; GetPlaylistDefinition(BestLayer.MusicTag, PlaylistDef))
 	{
@@ -399,7 +463,6 @@ void UDualNodeAudioSubsystem::UpdateMusicSystem()
 
 	FDualNodeMusicDefinition BaseDef;
 	const bool bHasData = GetMusicDefinition(FinalTrackTag, BaseDef);
-	
 	const FDualNodeMusicDefinition Def = ApplyOverrides(BaseDef, BestLayer.ActiveSettings);
 
 	if (bHasData)

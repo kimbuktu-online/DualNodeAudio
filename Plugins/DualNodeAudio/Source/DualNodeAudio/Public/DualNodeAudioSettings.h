@@ -2,8 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
-#include "Engine/EngineTypes.h" // Für ECollisionChannel
+#include "Engine/EngineTypes.h"
 #include "DualNodeAudioRegistry.h"
+#include "Sound/SoundMix.h"   // WICHTIG
+#include "Sound/SoundClass.h" // WICHTIG
 #include "DualNodeAudioSettings.generated.h"
 
 UCLASS(Config=Game, DefaultConfig, meta=(DisplayName="Dual Node Audio"))
@@ -17,11 +19,21 @@ public:
 		CategoryName = TEXT("Game");
 	}
 
-	// --- DATA ---
+	// --- REGISTRIES ---
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "General")
 	TArray<TSoftObjectPtr<UDualNodeAudioRegistry>> Registries;
 
-	// --- DEBUGGING (DNA 8.0/11.0) ---
+	// --- MIXING (NEU IN V13.0) ---
+	// Der Master-Mix, der beim Start automatisch gepusht wird.
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Mixing")
+	TSoftObjectPtr<USoundMix> GlobalSoundMix;
+
+	// Mapping: Welcher Tag gehört zu welcher SoundClass?
+	// Key: "Audio.Type.Music" -> Value: SC_Music
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Mixing")
+	TMap<FGameplayTag, TSoftObjectPtr<USoundClass>> TagToSoundClassDefaults;
+
+	// --- DEBUGGING ---
 	UPROPERTY(Config, EditAnywhere, Category = "Debugging")
 	bool bEnableVerboseLogging = false;
 
@@ -31,7 +43,7 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Debugging")
 	bool bDrawDebugSpheres = false;
 
-	// --- BEHAVIOR (DNA 8.0) ---
+	// --- BEHAVIOR ---
 	UPROPERTY(Config, EditAnywhere, Category = "Behavior")
 	bool bPauseMusicOnGamePause = true;
 
@@ -41,7 +53,7 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Behavior")
 	bool bEnableServerTimeSync = true;
 
-	// --- PHYSICS (DNA 9.0) ---
+	// --- PHYSICS ---
 	UPROPERTY(Config, EditAnywhere, Category = "Physics")
 	bool bEnablePhysicsMaterialSupport = true;
 

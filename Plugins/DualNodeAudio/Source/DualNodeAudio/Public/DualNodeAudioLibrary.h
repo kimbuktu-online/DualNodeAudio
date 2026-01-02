@@ -9,7 +9,7 @@
 class APlayerController;
 
 /**
- * DNA 11.0 Library - Fully Async & Network Ready
+ * DNA 13.0 Library
  */
 UCLASS()
 class DUALNODEAUDIO_API UDualNodeAudioLibrary : public UBlueprintFunctionLibrary
@@ -19,20 +19,30 @@ class DUALNODEAUDIO_API UDualNodeAudioLibrary : public UBlueprintFunctionLibrary
 public:
 
 	// ==========================================================================================
-	// OPTIMIZATION & PRELOADING (NEU)
+	// MIXING (V13.0)
 	// ==========================================================================================
+	
+	/**
+	 * Sets the volume for a specific Class Tag defined in Project Settings.
+	 * @param ClassTag The Gameplay Tag mapped to a SoundClass (e.g. "Audio.Music").
+	 * @param Volume 0.0 to 1.0 (or higher).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Dual Node Audio|Mixing", meta = (WorldContext = "WorldContextObject"))
+	static void SetVolumeByClassTag(const UObject* WorldContextObject, FGameplayTag ClassTag, float Volume, float FadeTime = 0.5f);
 
 	/**
-	 * Preloads all sounds that match the given Tag (and children) into Memory asynchronously.
-	 * [USAGE] Call this during Loading Screens or Level transitions (e.g. "Audio.Combat").
-	 * Prevents hiccups when sounds are played for the first time.
+	 * Mutes or Unmutes a Class Tag.
 	 */
+	UFUNCTION(BlueprintCallable, Category = "Dual Node Audio|Mixing", meta = (WorldContext = "WorldContextObject"))
+	static void MuteClassTag(const UObject* WorldContextObject, FGameplayTag ClassTag, bool bMuted, float FadeTime = 0.5f);
+
+	// ==========================================================================================
+	// OPTIMIZATION & PRELOADING
+	// ==========================================================================================
+
 	UFUNCTION(BlueprintCallable, Category = "Dual Node Audio|Optimization", meta = (WorldContext = "WorldContextObject"))
 	static void PreloadSoundGroup(const UObject* WorldContextObject, FGameplayTag RootTag);
 
-	/**
-	 * Debugs the current Audio Stack to the screen.
-	 */
 	UFUNCTION(BlueprintCallable, Category = "Dual Node Audio|Debug", meta = (WorldContext = "WorldContextObject"))
 	static void DebugAudioState(const UObject* WorldContextObject);
 
