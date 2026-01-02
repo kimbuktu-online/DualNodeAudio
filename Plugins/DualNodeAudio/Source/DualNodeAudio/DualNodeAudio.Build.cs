@@ -8,20 +8,6 @@ public class DualNodeAudio : ModuleRules
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 		
-		PublicIncludePaths.AddRange(
-			new string[] {
-				// ... add public include paths required here ...
-			}
-			);
-				
-		
-		PrivateIncludePaths.AddRange(
-			new string[] {
-				// ... add other private include paths required here ...
-			}
-			);
-
-
 		PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
@@ -33,23 +19,30 @@ public class DualNodeAudio : ModuleRules
 		);
 
 
-        PrivateDependencyModuleNames.AddRange(
-	        new string[]
-	        {
-		        "CoreUObject",
-		        "Engine",
-		        "Slate",
-		        "SlateCore",
-		        "NetCore"
-	        }
-        );
-		
-		
-		DynamicallyLoadedModuleNames.AddRange(
+		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
-				// ... add any modules that your module loads dynamically here ...
+				"CoreUObject",
+				"Engine",
+				"Slate",
+				"SlateCore",
+				"NetCore",
+				"AudioExtensions" // Nützlich für Modulation/Occlusion
 			}
+		);
+		
+		// --- EDITOR ONLY DEPENDENCIES ---
+		if (Target.bBuildEditor)
+		{
+			PrivateDependencyModuleNames.AddRange(
+				new string[]
+				{
+					"UnrealEd",
+					"AssetTools",
+					"EditorFramework",
+					"AudioEditor" // <--- FIX: Hier leben die Sound Factories!
+				}
 			);
+		}
 	}
 }

@@ -1,7 +1,13 @@
-﻿#include "DualNodeAudioLibrary.h"
+﻿// Copyright YourCompany. All Rights Reserved.
+
+#include "DualNodeAudioLibrary.h"
 #include "DualNodeAudioSubsystem.h"
 #include "DualNodeMusicManager.h"
 #include "DualNodePlayerAudioComponent.h"
+#include "DualNodeAudioSettings.h"
+#include "EngineUtils.h"
+#include "Kismet/GameplayStatics.h"
+#include "DrawDebugHelpers.h"
 
 UDualNodeAudioSubsystem* GetDNASubsystem(const UObject* WorldContext)
 {
@@ -16,7 +22,15 @@ UDualNodeAudioSubsystem* GetDNASubsystem(const UObject* WorldContext)
 	return nullptr;
 }
 
-// --- MIXING IMPLS (V13.0) ---
+// Ensure static to avoid linker errors
+static USoundBase* LoadSoundSync(const TSoftObjectPtr<USoundBase>& SoftSound)
+{
+	if (SoftSound.IsNull()) return nullptr;
+	if (USoundBase* Loaded = SoftSound.Get()) return Loaded;
+	return SoftSound.LoadSynchronous();
+}
+
+// --- MIXING ---
 
 void UDualNodeAudioLibrary::SetVolumeByClassTag(const UObject* WorldContextObject, FGameplayTag ClassTag, float Volume, float FadeTime)
 {
@@ -34,8 +48,7 @@ void UDualNodeAudioLibrary::MuteClassTag(const UObject* WorldContextObject, FGam
 	}
 }
 
-
-// --- NEW FEATURES ---
+// --- OPTIMIZATION ---
 
 void UDualNodeAudioLibrary::PreloadSoundGroup(const UObject* WorldContextObject, FGameplayTag RootTag)
 {
@@ -47,18 +60,13 @@ void UDualNodeAudioLibrary::PreloadSoundGroup(const UObject* WorldContextObject,
 
 void UDualNodeAudioLibrary::DebugAudioState(const UObject* WorldContextObject)
 {
-	if (UDualNodeAudioSubsystem* Sys = GetDNASubsystem(WorldContextObject))
+	if (GEngine)
 	{
-		// Printing simple debug info
-		if (GEngine)
-		{
-			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, TEXT("--- DNA AUDIO STACK ---"));
-			// Hier könntest du Sys->GetStateSnapshot() aufrufen und printen
-		}
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, TEXT("--- DNA AUDIO STACK ---"));
 	}
 }
 
-// --- STANDARD IMPLS (Standard, Unchanged) ---
+// --- SFX IMPLS ---
 
 void UDualNodeAudioLibrary::PlaySoundByTag_2D(const UObject* WorldContextObject, FGameplayTag Tag, float VolumeMultiplier, float PitchMultiplier)
 {
@@ -78,22 +86,50 @@ void UDualNodeAudioLibrary::PlaySoundByTag_AtLocation(const UObject* WorldContex
 
 void UDualNodeAudioLibrary::PlaySoundByTag_WithPhysics(const UObject* WorldContextObject, FGameplayTag Tag, FHitResult Hit, float VolumeMultiplier, float PitchMultiplier)
 {
-	if (UDualNodeAudioSubsystem* Sys = GetDNASubsystem(WorldContextObject))
+	// FIX: Zugriff auf Get() ist jetzt validiert durch den neuen Header
+	const UDualNodeAudioSettings* Settings = UDualNodeAudioSettings::Get();
+	if (Settings && !Settings->bEnablePhysicsMaterialSupport)
 	{
-		// Hier müsste ResolveSoundFromPhysics Logic rein, oder neue Subsystem Funktion.
-		// Fallback:
-		Sys->PlaySoundAtLocation(WorldContextObject, Tag, Hit.Location, FRotator::ZeroRotator, VolumeMultiplier, PitchMultiplier);
+		PlaySoundByTag_AtLocation(WorldContextObject, Tag, Hit.Location, FRotator::ZeroRotator, VolumeMultiplier, PitchMultiplier);
+		return;
+	}
+
+	if (const UDualNodeAudioSubsystem* Sys = GetDNASubsystem(WorldContextObject))
+	{
+		FDualNodeSoundDefinition Def;
+		if (Sys->GetSoundDefinition(Tag, Def))
+		{
+			// FIX C2440: TSoftObjectPtr in lokalen Pointer auflösen
+			TSoftObjectPtr<USoundBase> SoftSound = Sys->ResolveSoundFromPhysics(Def, Hit.PhysMaterial.Get());
+			USoundBase* FinalSound = LoadSoundSync(SoftSound);
+			
+			if (FinalSound)
+			{
+				UGameplayStatics::PlaySoundAtLocation(
+					WorldContextObject, 
+					FinalSound, 
+					Hit.Location, 
+					FRotator::ZeroRotator, 
+					Def.VolumeMultiplier * VolumeMultiplier, 
+					Def.PitchMultiplier * PitchMultiplier, 
+					0.0f, 
+					Def.Attenuation, 
+					Def.Concurrency
+				);
+			}
+		}
 	}
 }
 
 void UDualNodeAudioLibrary::BroadcastSoundByTag_AtLocation(const UObject* WorldContextObject, FGameplayTag Tag, const FVector& Location, FRotator Rotation, bool bReliable)
 {
-	if (UDualNodeAudioSubsystem* Sys = GetDNASubsystem(WorldContextObject))
+	if (const UWorld* World = WorldContextObject->GetWorld())
 	{
-		if (ADualNodeMusicManager* Manager = Sys->GetOrSpawnMusicManager(WorldContextObject))
+		for (TActorIterator<ADualNodeMusicManager> It(World); It; ++It)
 		{
-			if (bReliable) Manager->MulticastPlaySoundAtLocation_Reliable(Tag, Location, Rotation, 1.f, 1.f);
-			else Manager->MulticastPlaySoundAtLocation(Tag, Location, Rotation, 1.f, 1.f);
+			if (bReliable) It->MulticastPlaySoundAtLocation_Reliable(Tag, Location, Rotation, 1.f, 1.f);
+			else It->MulticastPlaySoundAtLocation(Tag, Location, Rotation, 1.f, 1.f);
+			return;
 		}
 	}
 }
@@ -116,56 +152,66 @@ bool UDualNodeAudioLibrary::PlayBarkByTag(const UObject* WorldContextObject, FGa
 	return false;
 }
 
-// --- MUSIC ---
+// --- MUSIC IMPLS ---
 
 void UDualNodeAudioLibrary::SetGlobalMusic(const UObject* WorldContextObject, EDNAMusicPriority Priority, FGameplayTag MusicTag, FDualNodePlaybackSettings Settings)
 {
-	if (UDualNodeAudioSubsystem* Sys = GetDNASubsystem(WorldContextObject))
+	if (const UWorld* World = WorldContextObject->GetWorld())
 	{
-		if (ADualNodeMusicManager* Manager = Sys->GetOrSpawnMusicManager(WorldContextObject))
+		for (TActorIterator<ADualNodeMusicManager> It(World); It; ++It)
 		{
-			Manager->Server_SetGlobalMusic(Priority, MusicTag, Settings);
+			It->Server_SetGlobalMusic(Priority, MusicTag, Settings);
+			return;
 		}
 	}
 }
 
 void UDualNodeAudioLibrary::ClearGlobalMusic(const UObject* WorldContextObject, EDNAMusicPriority Priority)
 {
-	if (UDualNodeAudioSubsystem* Sys = GetDNASubsystem(WorldContextObject))
+	if (const UWorld* World = WorldContextObject->GetWorld())
 	{
-		if (ADualNodeMusicManager* Manager = Sys->GetOrSpawnMusicManager(WorldContextObject))
+		for (TActorIterator<ADualNodeMusicManager> It(World); It; ++It)
 		{
-			Manager->Server_ClearGlobalMusic(Priority);
+			It->Server_ClearGlobalMusic(Priority);
+			return;
 		}
 	}
 }
 
 void UDualNodeAudioLibrary::PauseGlobalMusic(const UObject* WorldContextObject, EDNAMusicPriority Priority)
 {
-	if (UDualNodeAudioSubsystem* Sys = GetDNASubsystem(WorldContextObject))
+	if (const UWorld* World = WorldContextObject->GetWorld())
 	{
-		if (ADualNodeMusicManager* Manager = Sys->GetOrSpawnMusicManager(WorldContextObject))
+		for (TActorIterator<ADualNodeMusicManager> It(World); It; ++It)
 		{
-			Manager->Server_PauseMusic(Priority);
+			It->Server_PauseMusic(Priority);
+			return;
 		}
 	}
 }
 
 void UDualNodeAudioLibrary::ResumeGlobalMusic(const UObject* WorldContextObject, EDNAMusicPriority Priority)
 {
-	if (UDualNodeAudioSubsystem* Sys = GetDNASubsystem(WorldContextObject))
+	if (const UWorld* World = WorldContextObject->GetWorld())
 	{
-		if (ADualNodeMusicManager* Manager = Sys->GetOrSpawnMusicManager(WorldContextObject))
+		for (TActorIterator<ADualNodeMusicManager> It(World); It; ++It)
 		{
-			Manager->Server_ResumeMusic(Priority);
+			It->Server_ResumeMusic(Priority);
+			return;
 		}
 	}
 }
 
 void UDualNodeAudioLibrary::SkipGlobalMusicTrack(const UObject* WorldContextObject, EDNAMusicPriority Priority)
 {
-	// Skip Logic ist noch nicht voll repliziert in V12, 
-	// aber wir können hier Placeholder lassen oder über Manager implementieren.
+	if (const UWorld* World = WorldContextObject->GetWorld())
+	{
+		for (TActorIterator<ADualNodeMusicManager> It(World); It; ++It)
+		{
+			It->Server_SkipMusicTrack(Priority);
+			return;
+		}
+	}
 }
 
 void UDualNodeAudioLibrary::SetLocalMusic(const UObject* WorldContextObject, EDNAMusicPriority Priority, FGameplayTag MusicTag, FDualNodePlaybackSettings Settings)

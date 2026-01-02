@@ -15,14 +15,14 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	// --- SFX RPCs (Bleiben RPCs, da "Fire-and-Forget") ---
+	// --- SFX RPCs ---
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlaySoundAtLocation(FGameplayTag SoundTag, FVector Location, FRotator Rotation, float VolumeMult, float PitchMult);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastPlaySoundAtLocation_Reliable(FGameplayTag SoundTag, FVector Location, FRotator Rotation, float VolumeMult, float PitchMult);
 
-	// --- GLOBAL MUSIC STATE (Neu: Replicated Variable) ---
+	// --- MUSIC CONTROL ---
 	
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Dual Node Audio|Music")
 	void Server_SetGlobalMusic(EDNAMusicPriority Priority, FGameplayTag Tag, FDualNodePlaybackSettings Settings);
@@ -36,10 +36,15 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Dual Node Audio|Music")
 	void Server_ResumeMusic(EDNAMusicPriority Priority);
 
+	// FIX: Hinzugefügt für Library Error C2039
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Dual Node Audio|Music")
+	void Server_SkipMusicTrack(EDNAMusicPriority Priority);
+
+	// Interne Multicast für den Skip-Befehl
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_SkipMusicTrack(EDNAMusicPriority Priority);
+
 protected:
-	// Array of Replicated States (Index = Priority)
-	// Wir nutzen ein fixes Array für die Prioritäten 1-5, um Overhead zu sparen.
-	// Index 0 ist Dummy.
 	UPROPERTY(ReplicatedUsing = OnRep_MusicStates)
 	TArray<FReplicatedMusicState> ActiveMusicStates;
 

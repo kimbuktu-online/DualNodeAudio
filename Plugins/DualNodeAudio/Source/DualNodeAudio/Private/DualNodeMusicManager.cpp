@@ -7,8 +7,7 @@
 ADualNodeMusicManager::ADualNodeMusicManager()
 {
 	bReplicates = true;
-	bAlwaysRelevant = true; // Wichtig für JIP: Jeder Client muss diesen Actor kennen
-	
+	bAlwaysRelevant = true;
 	// Initialisiere leere States für Prio 0 bis 5
 	ActiveMusicStates.SetNum(6);
 }
@@ -36,7 +35,6 @@ void ADualNodeMusicManager::PlayLocalSound(FGameplayTag Tag, FVector Location, F
 	{
 		if (UDualNodeAudioSubsystem* Subsystem = GI->GetSubsystem<UDualNodeAudioSubsystem>())
 		{
-			// Async Play via Subsystem
 			Subsystem->PlaySoundAtLocation(this, Tag, Location, Rotation, Volume, Pitch);
 		}
 	}
@@ -55,14 +53,14 @@ void ADualNodeMusicManager::Server_SetGlobalMusic(EDNAMusicPriority Priority, FG
 		Timestamp = GS->GetServerWorldTimeSeconds();
 	}
 
-	FReplicatedMusicState& State = ActiveMusicStates[Idx];
-	State.Tag = Tag;
-	State.Priority = Priority;
-	State.Settings = Settings;
-	State.ServerTimestamp = Timestamp;
-	State.bIsPaused = false;
+	// Update State
+	ActiveMusicStates[Idx].Tag = Tag;
+	ActiveMusicStates[Idx].Priority = Priority;
+	ActiveMusicStates[Idx].Settings = Settings;
+	ActiveMusicStates[Idx].ServerTimestamp = Timestamp;
+	ActiveMusicStates[Idx].bIsPaused = false;
 
-	// Server Update Immediately
+	// Server Update Immediately (RepNotify wird auf Server nicht automatisch gerufen für den Setter)
 	OnRep_MusicStates();
 }
 
@@ -71,7 +69,6 @@ void ADualNodeMusicManager::Server_ClearGlobalMusic(EDNAMusicPriority Priority)
 	int32 Idx = static_cast<int32>(Priority);
 	if (!ActiveMusicStates.IsValidIndex(Idx)) return;
 
-	// Clear Tag
 	ActiveMusicStates[Idx].Tag = FGameplayTag::EmptyTag;
 	ActiveMusicStates[Idx].bIsPaused = false;
 
@@ -98,14 +95,31 @@ void ADualNodeMusicManager::Server_ResumeMusic(EDNAMusicPriority Priority)
 	}
 }
 
+// FIX: Implementation for Skip
+void ADualNodeMusicManager::Server_SkipMusicTrack(EDNAMusicPriority Priority)
+{
+	// Skip ist ein Event, kein persistenter State im Replicated Array (außer wir würden PlaylistIndex replizieren).
+	// Fürs erste triggern wir es als RPC Event.
+	Multicast_SkipMusicTrack(Priority);
+}
+
+void ADualNodeMusicManager::Multicast_SkipMusicTrack_Implementation(EDNAMusicPriority Priority)
+{
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UDualNodeAudioSubsystem* Sys = GI->GetSubsystem<UDualNodeAudioSubsystem>())
+		{
+			Sys->SkipMusicTrack(Priority);
+		}
+	}
+}
+
 void ADualNodeMusicManager::OnRep_MusicStates()
 {
 	if (UGameInstance* GI = GetGameInstance())
 	{
 		if (UDualNodeAudioSubsystem* Sys = GI->GetSubsystem<UDualNodeAudioSubsystem>())
 		{
-			// Wir pushen den gesamten State in das lokale Subsystem
-			// Das Subsystem entscheidet dann, was tatsächlich spielt (höchste Prio)
 			for (const FReplicatedMusicState& State : ActiveMusicStates)
 			{
 				if (State.Priority == EDNAMusicPriority::None) continue;
