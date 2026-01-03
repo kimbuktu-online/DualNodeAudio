@@ -7,9 +7,6 @@
 #include "DualNodeInventoryTypes.h"
 #include "DualNodeItemDefinition.generated.h"
 
-/** * Node A: Die statische Definition eines Items.
- * Hier liegen alle Daten, die sich zur Laufzeit nicht ändern[cite: 5, 13].
- */
 UCLASS(BlueprintType, Const)
 class DUALNODEINVENTORY_API UDualNodeItemDefinition : public UPrimaryDataAsset
 {
@@ -46,7 +43,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	const UDualNodeItemFragment* FindFragmentByClass(TSubclassOf<UDualNodeItemFragment> FragmentClass) const;
 
-	/** Asset Manager Integration [cite: 13] */
 	virtual FPrimaryAssetId GetPrimaryAssetId() const override 
 	{ 
 		return FPrimaryAssetId("Item", GetFName()); 

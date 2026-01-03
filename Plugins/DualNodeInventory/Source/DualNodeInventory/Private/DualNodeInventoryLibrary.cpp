@@ -2,7 +2,6 @@
 #include "DualNodeInventoryComponent.h"
 #include "DualNodeItemFragment_Audio.h"
 #include "Kismet/GameplayStatics.h"
-#include "Templates/SubclassOf.h"
 
 UDualNodeInventoryComponent* UDualNodeInventoryLibrary::GetInventoryComponent(AActor* Target)
 {
@@ -24,10 +23,10 @@ bool UDualNodeInventoryLibrary::TransferItem(UDualNodeInventoryComponent* Source
 		}
 		else
 		{
+			// Rollback Logik
 			Source->TryAddItem(Item, Amount);
 		}
 	}
-
 	return false;
 }
 
@@ -35,16 +34,14 @@ void UDualNodeInventoryLibrary::PlayItemSound(const UDualNodeItemDefinition* Ite
 {
 	if (!Item || !ContextActor) return;
 
-	// Suche nach dem Audio-Fragment in der Definition (Node A) [cite: 5, 13]
 	const UDualNodeItemFragment* Fragment = Item->FindFragmentByClass(UDualNodeItemFragment_Audio::StaticClass());
 	const UDualNodeItemFragment_Audio* AudioFrag = Cast<UDualNodeItemFragment_Audio>(Fragment);
 
 	if (AudioFrag)
 	{
-		// Korrekte Handhabung von TObjectPtr in einer TMap [cite: 7, 33]
 		if (const TObjectPtr<USoundBase>* SoundPtr = AudioFrag->SoundMap.Find(ActionTag))
 		{
-			if (USoundBase* Sound = SoundPtr->Get()) // Konvertierung von TObjectPtr zu Raw Pointer
+			if (USoundBase* Sound = SoundPtr->Get())
 			{
 				UGameplayStatics::PlaySoundAtLocation(ContextActor, Sound, ContextActor->GetActorLocation());
 			}

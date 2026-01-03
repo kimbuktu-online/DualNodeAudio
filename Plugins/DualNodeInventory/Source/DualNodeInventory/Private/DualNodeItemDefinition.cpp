@@ -11,6 +11,5 @@ const UDualNodeItemFragment* UDualNodeItemDefinition::FindFragmentByClass(TSubcl
 			return Fragment;
 		}
 	}
-
 	return nullptr;
 }
