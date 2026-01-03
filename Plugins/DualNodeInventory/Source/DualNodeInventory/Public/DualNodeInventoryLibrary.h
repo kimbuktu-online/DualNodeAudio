@@ -11,15 +11,17 @@ class DUALNODEINVENTORY_API UDualNodeInventoryLibrary : public UBlueprintFunctio
 	GENERATED_BODY()
 
 public:
-	/** Überprüft, ob ein Actor das DualNodeInterface besitzt und gibt die Komponente zurück */
-	UFUNCTION(BlueprintCallable, Category="DualNode|Inventory", meta=(DefaultToSelf="Target"))
+	/** Holt die Inventar-Komponente sicher über das Interface oder direkten Cast */
+	UFUNCTION(BlueprintCallable, Category="DualNode|Inventory")
 	static class UDualNodeInventoryComponent* GetInventoryComponent(AActor* Target);
 
-	/** Hochoptimierte Transfer-Logik zwischen zwei Containern [cite: 42, 43] */
 	UFUNCTION(BlueprintCallable, Category="DualNode|Inventory")
 	static bool TransferItem(UDualNodeInventoryComponent* Source, UDualNodeInventoryComponent* Destination, const UDualNodeItemDefinition* Item, int32 Amount);
 
-	/** Löst Audio-Events basierend auf Item-Fragmenten aus */
+	/** Sortiert das Inventar (Server-Side) */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="DualNode|Inventory")
+	static void SortInventory(UDualNodeInventoryComponent* Inventory);
+
 	UFUNCTION(BlueprintCallable, Category="DualNode|Audio")
 	static void PlayItemSound(const UDualNodeItemDefinition* Item, FGameplayTag ActionTag, AActor* ContextActor);
 };

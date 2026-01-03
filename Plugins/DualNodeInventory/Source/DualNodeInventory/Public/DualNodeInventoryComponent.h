@@ -26,6 +26,9 @@ public:
 	bool RemoveItem(const UDualNodeItemDefinition* ItemDef, int32 Amount = 1);
 
 	UFUNCTION(BlueprintPure, Category="Inventory")
+	float GetTotalWeight() const;
+
+	UFUNCTION(BlueprintPure, Category="Inventory")
 	int32 GetTotalAmountOfItem(const UDualNodeItemDefinition* ItemDef) const;
 
 	int32 GetTotalAmountOfItemById(FPrimaryAssetId ItemId) const;
@@ -35,6 +38,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Inventory|Persistence")
 	void LoadInventoryFromSnapshot(const FDualNodeInventorySaveData& Snapshot);
+
+	/** Zugriff auf die rohen Daten (z.B. für UI ViewModels) */
+	const TArray<FDualNodeItemInstance>& GetItems() const { return InventoryArray.Items; }
 
 protected:
 	UPROPERTY(ReplicatedUsing=OnRep_Inventory)

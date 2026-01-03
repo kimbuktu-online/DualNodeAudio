@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Net/Serialization/FastArraySerializer.h"
+#include "GameplayTagContainer.h"
 #include "DualNodeItemDefinition.h"
 #include "DualNodeItemInstance.generated.h"
 
@@ -18,6 +19,10 @@ struct FDualNodeItemInstance : public FFastArraySerializerItem
 
 	UPROPERTY(BlueprintReadOnly)
 	FGuid InstanceGuid;
+
+	/** Dynamische Zustände (z.B. State.Equipped, State.Broken) */
+	UPROPERTY(BlueprintReadWrite)
+	FGameplayTagContainer DynamicTags;
 
 	UPROPERTY(NotReplicated, BlueprintReadOnly)
 	TObjectPtr<const UDualNodeItemDefinition> CachedDefinition = nullptr;

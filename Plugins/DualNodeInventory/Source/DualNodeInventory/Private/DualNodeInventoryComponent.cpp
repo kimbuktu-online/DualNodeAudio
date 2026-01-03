@@ -20,12 +20,11 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 	if (!GetOwner()->HasAuthority() || !ItemDef || Amount <= 0) return false;
 
 	FText FailReason;
-	// FIX: Iteration über TObjectPtr erfordert expliziten Typ oder Wrapper-Referenz
 	for (const TObjectPtr<UDualNodeInventoryValidator>& ValidatorPtr : Validators)
 	{
 		if (ValidatorPtr && !ValidatorPtr->CanAddItem(this, ItemDef, Amount, FailReason))
 		{
-			UE_LOGFMT(LogTemp, Warning, "DualNode: Validierung fehlgeschlagen: {Reason}", FailReason.ToString());
+			UE_LOGFMT(LogTemp, Warning, "DualNode Inventory: {Reason}", FailReason.ToString());
 			return false;
 		}
 	}
@@ -54,7 +53,6 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 		NewItem.ItemId = TargetId;
 		NewItem.CachedDefinition = ItemDef;
 		NewItem.StackCount = FMath::Min(RemainingAmount, ItemDef->MaxStackSize);
-		NewItem.InstanceGuid = FGuid::NewGuid();
 		RemainingAmount -= NewItem.StackCount;
 		InventoryArray.MarkArrayDirty();
 	}
@@ -82,15 +80,38 @@ bool UDualNodeInventoryComponent::RemoveItem(const UDualNodeItemDefinition* Item
 			InventoryArray.Items[i].StackCount -= ToRemove;
 			RemainingToRemove -= ToRemove;
 
-			if (InventoryArray.Items[i].StackCount <= 0) { InventoryArray.Items.RemoveAt(i); InventoryArray.MarkArrayDirty(); }
-			else { InventoryArray.MarkItemDirty(InventoryArray.Items[i]); }
-
+			if (InventoryArray.Items[i].StackCount <= 0)
+			{
+				InventoryArray.Items.RemoveAt(i);
+				InventoryArray.MarkArrayDirty();
+			}
+			else
+			{
+				InventoryArray.MarkItemDirty(InventoryArray.Items[i]);
+			}
 			if (RemainingToRemove <= 0) break;
 		}
 	}
 
-	if (RemainingToRemove < Amount) { OnRep_Inventory(); return true; }
+	if (RemainingToRemove < Amount)
+	{
+		OnRep_Inventory();
+		return true;
+	}
 	return false;
+}
+
+float UDualNodeInventoryComponent::GetTotalWeight() const
+{
+	float Weight = 0.0f;
+	for (const auto& Item : InventoryArray.Items)
+	{
+		if (Item.CachedDefinition)
+		{
+			Weight += (Item.CachedDefinition->ItemWeight * Item.StackCount);
+		}
+	}
+	return Weight;
 }
 
 int32 UDualNodeInventoryComponent::GetTotalAmountOfItem(const UDualNodeItemDefinition* ItemDef) const
@@ -101,7 +122,10 @@ int32 UDualNodeInventoryComponent::GetTotalAmountOfItem(const UDualNodeItemDefin
 int32 UDualNodeInventoryComponent::GetTotalAmountOfItemById(FPrimaryAssetId ItemId) const
 {
 	int32 Total = 0;
-	for (const auto& Item : InventoryArray.Items) if (Item.ItemId == ItemId) Total += Item.StackCount;
+	for (const auto& Item : InventoryArray.Items)
+	{
+		if (Item.ItemId == ItemId) Total += Item.StackCount;
+	}
 	return Total;
 }
 
@@ -111,7 +135,9 @@ FDualNodeInventorySaveData UDualNodeInventoryComponent::GetInventorySnapshot() c
 	for (const auto& Item : InventoryArray.Items)
 	{
 		FDualNodeItemSaveData& Data = Snapshot.SavedItems.AddDefaulted_GetRef();
-		Data.ItemId = Item.ItemId; Data.StackCount = Item.StackCount; Data.InstanceGuid = Item.InstanceGuid;
+		Data.ItemId = Item.ItemId;
+		Data.StackCount = Item.StackCount;
+		Data.InstanceGuid = Item.InstanceGuid;
 	}
 	return Snapshot;
 }
@@ -119,11 +145,14 @@ FDualNodeInventorySaveData UDualNodeInventoryComponent::GetInventorySnapshot() c
 void UDualNodeInventoryComponent::LoadInventoryFromSnapshot(const FDualNodeInventorySaveData& Snapshot)
 {
 	if (!GetOwner()->HasAuthority()) return;
+
 	InventoryArray.Items.Empty();
 	for (const auto& Saved : Snapshot.SavedItems)
 	{
 		FDualNodeItemInstance& NewItem = InventoryArray.Items.AddDefaulted_GetRef();
-		NewItem.ItemId = Saved.ItemId; NewItem.StackCount = Saved.StackCount; NewItem.InstanceGuid = Saved.InstanceGuid;
+		NewItem.ItemId = Saved.ItemId;
+		NewItem.StackCount = Saved.StackCount;
+		NewItem.InstanceGuid = Saved.InstanceGuid;
 		NewItem.ResolveDefinition();
 	}
 	InventoryArray.MarkArrayDirty();
@@ -132,6 +161,9 @@ void UDualNodeInventoryComponent::LoadInventoryFromSnapshot(const FDualNodeInven
 
 void UDualNodeInventoryComponent::OnRep_Inventory()
 {
-	for (FDualNodeItemInstance& Slot : InventoryArray.Items) Slot.ResolveDefinition();
+	for (FDualNodeItemInstance& Slot : InventoryArray.Items)
+	{
+		Slot.ResolveDefinition();
+	}
 	OnInventoryUpdated.Broadcast(this);
 }
