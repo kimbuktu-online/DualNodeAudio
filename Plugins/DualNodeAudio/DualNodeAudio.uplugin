@@ -1,7 +1,7 @@
 {
 	"FileVersion": 3,
 	"Version": 1,
-	"VersionName": "2.14.0",
+	"VersionName": "2.14.3",
 	"FriendlyName": "Dual Node Audio",
 	"Description": "Fully blueprint exposed and replicated audio framework",
 	"Category": "Dual Node",

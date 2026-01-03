@@ -12,12 +12,11 @@ public class DualNodeAudio : ModuleRules
 			new string[]
 			{
 				"Core",
-				"GameplayTags", // WICHTIG: Für die Tags
-				"PhysicsCore",  // WICHTIG: Für Physical Materials
-				"DeveloperSettings" // WICHTIG: Für Project Settings
+				"GameplayTags",
+				"PhysicsCore",
+				"DeveloperSettings"
 			}
 		);
-
 
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
@@ -27,11 +26,11 @@ public class DualNodeAudio : ModuleRules
 				"Slate",
 				"SlateCore",
 				"NetCore",
-				"AudioExtensions" // Nützlich für Modulation/Occlusion
+				"AudioExtensions"
 			}
 		);
 		
-		// --- EDITOR ONLY DEPENDENCIES ---
+		// WICHTIG: Diese Abhängigkeiten erlauben uns, Assets zu erstellen (nur im Editor)
 		if (Target.bBuildEditor)
 		{
 			PrivateDependencyModuleNames.AddRange(
@@ -40,7 +39,7 @@ public class DualNodeAudio : ModuleRules
 					"UnrealEd",
 					"AssetTools",
 					"EditorFramework",
-					"AudioEditor" // <--- FIX: Hier leben die Sound Factories!
+					"AudioEditor" 
 				}
 			);
 		}
