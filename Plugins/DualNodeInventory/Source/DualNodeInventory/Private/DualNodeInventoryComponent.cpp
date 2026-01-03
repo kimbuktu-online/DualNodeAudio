@@ -1,6 +1,7 @@
 ﻿#include "DualNodeInventoryComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Logging/StructuredLog.h"
+#include "Engine/AssetManager.h"
 
 UDualNodeInventoryComponent::UDualNodeInventoryComponent()
 {
@@ -109,4 +110,48 @@ bool UDualNodeInventoryComponent::RemoveItem(const UDualNodeItemDefinition* Item
 void UDualNodeInventoryComponent::OnRep_Inventory()
 {
 	OnInventoryUpdated.Broadcast(this);
+}
+
+bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount)
+{
+	if (!GetOwner()->HasAuthority() || !ItemDef || Amount <= 0) return false;
+
+	FPrimaryAssetId TargetId = ItemDef->GetPrimaryAssetId();
+	int32 RemainingAmount = Amount;
+
+	// 1. Stacking-Logik
+	if (ItemDef->bCanStack)
+	{
+		for (FDualNodeItemInstance& Slot : InventoryArray.Items)
+		{
+			if (Slot.ItemId == TargetId && Slot.StackCount < ItemDef->MaxStackSize)
+			{
+				int32 ToAdd = FMath::Min(RemainingAmount, ItemDef->MaxStackSize - Slot.StackCount);
+				Slot.StackCount += ToAdd;
+				RemainingAmount -= ToAdd;
+				InventoryArray.MarkItemDirty(Slot);
+
+				if (RemainingAmount <= 0) break;
+			}
+		}
+	}
+
+	// 2. Neue Slots
+	while (RemainingAmount > 0 && InventoryArray.Items.Num() < MaxSlotCount)
+	{
+		FDualNodeItemInstance& NewItem = InventoryArray.Items.AddDefaulted_GetRef();
+		NewItem.ItemId = TargetId;
+		NewItem.CachedDefinition = ItemDef;
+		NewItem.StackCount = FMath::Min(RemainingAmount, ItemDef->MaxStackSize);
+		
+		RemainingAmount -= NewItem.StackCount;
+		InventoryArray.MarkArrayDirty();
+	}
+
+	if (RemainingAmount < Amount)
+	{
+		OnRep_Inventory();
+		return true;
+	}
+	return false;
 }
