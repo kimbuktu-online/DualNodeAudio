@@ -23,6 +23,32 @@ enum class EDualNodeResourceSubCategory : uint8
 	Fiber
 };
 
+/** Datensatz für ein einzelnes Item im Save-Game */
+USTRUCT(BlueprintType)
+struct FDualNodeItemSaveData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite)
+	FPrimaryAssetId ItemId;
+
+	UPROPERTY(BlueprintReadWrite)
+	int32 StackCount = 0;
+
+	UPROPERTY(BlueprintReadWrite)
+	FGuid InstanceGuid;
+};
+
+/** Vollständiger Inventar-Snapshot für Save-Games */
+USTRUCT(BlueprintType)
+struct FDualNodeInventorySaveData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadWrite)
+	TArray<FDualNodeItemSaveData> SavedItems;
+};
+
 UCLASS(BlueprintType)
 class DUALNODEINVENTORY_API UDualNodeRarityDefinition : public UDataAsset
 {
