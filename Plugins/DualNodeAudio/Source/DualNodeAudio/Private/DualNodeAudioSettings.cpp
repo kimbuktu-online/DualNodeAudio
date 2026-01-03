@@ -4,7 +4,6 @@
 #include "UObject/ConstructorHelpers.h"
 
 // ZENTRALE DEFINITION: Studio Struktur
-// "/Game/" entspricht dem "Content"-Ordner des Projekts.
 const FString DNA_PROJECT_ROOT = TEXT("/Game/DualNode/Audio/Defaults/");
 
 UDualNodeAudioSettings::UDualNodeAudioSettings(const FObjectInitializer& ObjectInitializer)
@@ -16,38 +15,37 @@ UDualNodeAudioSettings::UDualNodeAudioSettings(const FObjectInitializer& ObjectI
 	bWarnOnMissingTags = true;
 	bEnablePhysicsMaterialSupport = true;
 	
-	// Helper Lambda für sauberen Code
 	auto MakeDNAPath = [&](const FString& FileName) -> FSoftObjectPath
 	{
 		return FSoftObjectPath(DNA_PROJECT_ROOT + FileName + "." + FileName);
 	};
 
-	// --- DEFAULTS ---
-	// Diese zeigen jetzt auf Content/DualNode/Audio/Defaults/...
 	GlobalSoundMix = TSoftObjectPtr<USoundMix>(MakeDNAPath("Mix_GlobalMaster"));
 
+	// FIX: "false" als zweiter Parameter verhindert Crash beim Engine-Start
+	
 	TagToSoundClassDefaults.Add(
-		FGameplayTag::RequestGameplayTag(FName("Audio.Master")),
+		FGameplayTag::RequestGameplayTag(FName("Audio.Master"), false),
 		TSoftObjectPtr<USoundClass>(MakeDNAPath("SC_Master"))
 	);
 
 	TagToSoundClassDefaults.Add(
-		FGameplayTag::RequestGameplayTag(FName("Audio.Music")),
+		FGameplayTag::RequestGameplayTag(FName("Audio.Music"), false),
 		TSoftObjectPtr<USoundClass>(MakeDNAPath("SC_Music"))
 	);
 
 	TagToSoundClassDefaults.Add(
-		FGameplayTag::RequestGameplayTag(FName("Audio.SFX")),
+		FGameplayTag::RequestGameplayTag(FName("Audio.SFX"), false),
 		TSoftObjectPtr<USoundClass>(MakeDNAPath("SC_SFX"))
 	);
 	
 	TagToSoundClassDefaults.Add(
-		FGameplayTag::RequestGameplayTag(FName("Audio.Voice")),
+		FGameplayTag::RequestGameplayTag(FName("Audio.Voice"), false),
 		TSoftObjectPtr<USoundClass>(MakeDNAPath("SC_Voice"))
 	);
 
 	TagToSoundClassDefaults.Add(
-		FGameplayTag::RequestGameplayTag(FName("Audio.UI")),
+		FGameplayTag::RequestGameplayTag(FName("Audio.UI"), false),
 		TSoftObjectPtr<USoundClass>(MakeDNAPath("SC_UI"))
 	);
 }

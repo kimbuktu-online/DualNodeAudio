@@ -12,10 +12,10 @@ UDualNodeFoleyComponent::UDualNodeFoleyComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 	
-	// Defaults
-	WalkTag = FGameplayTag::RequestGameplayTag(FName("Audio.SFX.Footstep.Walk"));
-	SprintTag = FGameplayTag::RequestGameplayTag(FName("Audio.SFX.Footstep.Sprint"));
-	LandTag = FGameplayTag::RequestGameplayTag(FName("Audio.SFX.Impact.Land"));
+	// FIX: "false" verhindert Error, falls Konstruktor vor Modul-Startup läuft.
+	WalkTag = FGameplayTag::RequestGameplayTag(FName("Audio.SFX.Footstep.Walk"), false);
+	SprintTag = FGameplayTag::RequestGameplayTag(FName("Audio.SFX.Footstep.Sprint"), false);
+	LandTag = FGameplayTag::RequestGameplayTag(FName("Audio.SFX.Impact.Land"), false);
 }
 
 void UDualNodeFoleyComponent::BeginPlay()
@@ -40,10 +40,8 @@ void UDualNodeFoleyComponent::OnLanded(const FHitResult& Hit)
 				FDualNodeSoundDefinition Def;
 				if (Sys->GetSoundDefinition(LandTag, Def))
 				{
-					// Resolve Physics Asset (Async safe, returns SoftPtr)
 					TSoftObjectPtr<USoundBase> SoundToPlay = Sys->ResolveSoundFromPhysics(Def, Hit.PhysMaterial.Get());
 					
-					// Velocity Impact Volume
 					float ImpactVol = 1.0f;
 					if (MoveComp)
 					{
@@ -51,7 +49,6 @@ void UDualNodeFoleyComponent::OnLanded(const FHitResult& Hit)
 						ImpactVol = FMath::GetMappedRangeValueClamped(FVector2D(500.f, 2000.f), FVector2D(0.5f, 1.5f), ZVel);
 					}
 
-					// Use new Overload to play specific asset instead of Tag default
 					Sys->PlaySoundAtLocation(this, SoundToPlay, Hit.Location, FRotator::ZeroRotator, ImpactVol, 1.0f, &Def);
 				}
 			}
@@ -64,7 +61,6 @@ void UDualNodeFoleyComponent::TriggerFootstep()
 	if (!MoveComp) return;
 	if (MoveComp->IsFalling()) return;
 
-	// Velocity Check
 	float Vel = MoveComp->Velocity.Size2D();
 	if (Vel < 10.0f) return;
 
@@ -77,7 +73,6 @@ void UDualNodeFoleyComponent::TriggerFootstep()
 		Vel
 	);
 
-	// Raycast for PhysMat
 	FHitResult Hit;
 	FVector Start = GetOwner()->GetActorLocation();
 	FVector End = Start - FVector(0, 0, 150.0f);
@@ -97,10 +92,7 @@ void UDualNodeFoleyComponent::TriggerFootstep()
 				FDualNodeSoundDefinition Def;
 				if (Sys->GetSoundDefinition(TagToUse, Def))
 				{
-					// Resolve Physics Asset (SoftPtr)
 					TSoftObjectPtr<USoundBase> FinalSound = Sys->ResolveSoundFromPhysics(Def, Hit.PhysMaterial.Get());
-					
-					// Play specific resolved sound
 					Sys->PlaySoundAtLocation(this, FinalSound, Hit.Location, FRotator::ZeroRotator, VolumeMult, 1.0f, &Def);
 				}
 			}

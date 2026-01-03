@@ -9,10 +9,6 @@
 
 void FDualNodeAudioModule::StartupModule()
 {
-	// 1. Native Gameplay Tags registrieren
-	// Das prüft automatisch, ob sie existieren. Wenn nicht, werden sie erstellt.
-	// Wenn sie existieren, werden sie als "Native" markiert (nicht löschbar).
-	
 	UGameplayTagsManager& Manager = UGameplayTagsManager::Get();
 
 	// Root Tag
@@ -25,18 +21,22 @@ void FDualNodeAudioModule::StartupModule()
 	Manager.AddNativeGameplayTag(FName("Audio.Voice"), TEXT("Voice Over / Dialogue Layer"));
 	Manager.AddNativeGameplayTag(FName("Audio.UI"), TEXT("User Interface Sounds"));
 
-	// Optional: Standard Sub-Kategorien für SFX (Best Practice)
+	// Sub-Kategorien (WICHTIG: Hier fehlten die Footstep Tags!)
 	Manager.AddNativeGameplayTag(FName("Audio.SFX.Foley"), TEXT("Physical interactions"));
 	Manager.AddNativeGameplayTag(FName("Audio.SFX.Weapon"), TEXT("Weapon sounds"));
 	Manager.AddNativeGameplayTag(FName("Audio.SFX.Impact"), TEXT("Impact sounds"));
+	
+	// FIX: Spezifische Tags für Foley Component registrieren
+	Manager.AddNativeGameplayTag(FName("Audio.SFX.Footstep"), TEXT("Footstep parent"));
+	Manager.AddNativeGameplayTag(FName("Audio.SFX.Footstep.Walk"), TEXT("Walking sounds"));
+	Manager.AddNativeGameplayTag(FName("Audio.SFX.Footstep.Sprint"), TEXT("Sprinting sounds"));
+	Manager.AddNativeGameplayTag(FName("Audio.SFX.Impact.Land"), TEXT("Landing impact sounds"));
 
 	UE_LOG(LogTemp, Log, TEXT("Dual Node Audio: Native Gameplay Tags registered."));
 }
 
 void FDualNodeAudioModule::ShutdownModule()
 {
-	// Beim Shutdown müssen wir native Tags normalerweise nicht entfernen, 
-	// da der Tag Manager beim Beenden ohnehin bereinigt wird.
 }
 
 #undef LOCTEXT_NAMESPACE
