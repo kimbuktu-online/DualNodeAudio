@@ -19,6 +19,10 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	/** Prüft rein logisch, ob ein Item hinzugefügt werden könnte (Wichtig für UI) */
+	UFUNCTION(BlueprintPure, Category="Inventory")
+	bool CanAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount, FText& OutFailureReason) const;
+
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Inventory")
 	bool TryAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount = 1);
 
@@ -39,7 +43,6 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Inventory|Persistence")
 	void LoadInventoryFromSnapshot(const FDualNodeInventorySaveData& Snapshot);
 
-	/** Zugriff auf die rohen Daten (z.B. für UI ViewModels) */
 	const TArray<FDualNodeItemInstance>& GetItems() const { return InventoryArray.Items; }
 
 protected:
@@ -57,4 +60,8 @@ protected:
 
 	UPROPERTY(BlueprintAssignable, Category="Inventory")
 	FOnInventoryUpdated OnInventoryUpdated;
+
+private:
+	int32 FindStackableSlot(const UDualNodeItemDefinition* ItemDef) const;
+	int32 FindFreeSlot() const;
 };
