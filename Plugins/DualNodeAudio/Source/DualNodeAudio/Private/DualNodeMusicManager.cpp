@@ -3,6 +3,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/GameStateBase.h"
 #include "Net/UnrealNetwork.h"
+#include "Engine/GameInstance.h"
+#include "Engine/World.h"
 
 ADualNodeMusicManager::ADualNodeMusicManager()
 {

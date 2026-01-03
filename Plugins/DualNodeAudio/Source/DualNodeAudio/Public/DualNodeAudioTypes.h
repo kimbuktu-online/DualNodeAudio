@@ -37,19 +37,19 @@ struct FDualNodePlaybackSettings
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Override", meta=(ClampMin="-1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Settings", meta=(ClampMin="-1.0"))
 	float FadeInDuration = -1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Override", meta=(ClampMin="-1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Settings", meta=(ClampMin="-1.0"))
 	float FadeOutDuration = -1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Override", meta=(ClampMin="-1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Settings", meta=(ClampMin="-1.0"))
 	float VolumeMultiplier = -1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Override", meta=(ClampMin="-1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Settings", meta=(ClampMin="-1.0"))
 	float PitchMultiplier = -1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Override", meta=(ClampMin="-1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Settings", meta=(ClampMin="-1.0"))
 	float StartTime = -1.0f;
 };
 
@@ -60,28 +60,28 @@ struct FDualNodeSoundDefinition
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Definition")
 	TSoftObjectPtr<USoundBase> Sound;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mixing")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Mixing")
 	TObjectPtr<USoundClass> SoundClass = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mixing")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Mixing")
 	TArray<FSoundModulationDestinationSettings> ModulationSettings;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Concurrency")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Concurrency")
 	TObjectPtr<USoundConcurrency> Concurrency = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Physics")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Physics")
 	TMap<TObjectPtr<UPhysicalMaterial>, TSoftObjectPtr<USoundBase>> PhysicsMap;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Adjustments")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Adjustments")
 	float VolumeMultiplier = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Adjustments")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Adjustments")
 	float PitchMultiplier = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Adjustments")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Adjustments")
 	TObjectPtr<USoundAttenuation> Attenuation = nullptr;
 };
 
@@ -90,34 +90,34 @@ struct FDualNodeMusicDefinition
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Audio")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Definition")
 	TSoftObjectPtr<USoundBase> Sound;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Layers")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Layers")
 	TMap<FName, TSoftObjectPtr<USoundBase>> AdditionalLayers;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mixing")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Mixing")
 	TObjectPtr<USoundClass> SoundClass = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World", meta=(InlineEditConditionToggle))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|World", meta=(InlineEditConditionToggle))
 	bool bUseTimeOfDay = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "World", meta=(EditCondition="bUseTimeOfDay"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|World", meta=(EditCondition="bUseTimeOfDay"))
 	FVector2D ActiveHourRange = FVector2D(0.0f, 24.0f);
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transitions")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Transitions")
 	float FadeInDuration = 2.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Transitions")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Transitions")
 	float FadeOutDuration = 2.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Adjustments")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Adjustments")
 	float VolumeMultiplier = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Adjustments")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Adjustments")
 	float PitchMultiplier = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Adjustments")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Adjustments")
 	float StartTime = 0.0f;
 };
 
@@ -126,13 +126,13 @@ struct FDualNodePlaylist
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Playlist")
 	TArray<FGameplayTag> Tracks;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Playlist")
 	EDNAPlaylistMode PlayMode = EDNAPlaylistMode::Sequential;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Playlist")
 	bool bAutoAdvance = true;
 };
 
@@ -141,19 +141,19 @@ struct FDualNodeBarkDefinition
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Bark")
 	TSoftObjectPtr<USoundBase> Sound;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Bark")
 	FGameplayTag CooldownGroup;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Bark")
 	float CooldownDuration = 5.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Bark")
 	float TriggerChance = 1.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "DNA|Bark")
 	TObjectPtr<USoundConcurrency> Concurrency = nullptr;
 };
 
@@ -164,16 +164,16 @@ struct FActiveMusicLayer
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadOnly)
+	UPROPERTY(BlueprintReadOnly, Category = "DNA|Runtime")
 	FGameplayTag MusicTag;
 
-	UPROPERTY(BlueprintReadOnly)
+	UPROPERTY(BlueprintReadOnly, Category = "DNA|Runtime")
 	double ServerStartTime = 0.0;
 	
-	UPROPERTY(BlueprintReadOnly)
+	UPROPERTY(BlueprintReadOnly, Category = "DNA|Runtime")
 	bool bIsActive = false;
 
-	UPROPERTY(BlueprintReadOnly)
+	UPROPERTY(BlueprintReadOnly, Category = "DNA|Runtime")
 	bool bIsPaused = false;
 	
 	UPROPERTY()
@@ -188,10 +188,6 @@ struct FActiveMusicLayer
 
 // --- NETWORKING ---
 
-/**
- * Optimiertes Struct für Netzwerk-Replikation.
- * Wir replizieren nicht den kompletten Overhead, sondern nur die wichtigen Daten.
- */
 USTRUCT()
 struct FReplicatedMusicState
 {
@@ -220,9 +216,9 @@ struct FDNASaveData
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadWrite)
+	UPROPERTY(BlueprintReadWrite, Category = "DNA|SaveData")
 	TMap<EDNAMusicPriority, FActiveMusicLayer> SavedLayers;
 
-	UPROPERTY(BlueprintReadWrite)
+	UPROPERTY(BlueprintReadWrite, Category = "DNA|SaveData")
 	float SavedTimeOfDay = 12.0f;
 };

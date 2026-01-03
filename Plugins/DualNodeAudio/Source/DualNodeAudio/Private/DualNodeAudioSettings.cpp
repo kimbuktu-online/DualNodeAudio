@@ -3,6 +3,10 @@
 #include "DualNodeAudioSettings.h"
 #include "UObject/ConstructorHelpers.h"
 
+// ZENTRALE DEFINITION: Studio Struktur
+// "/Game/" entspricht dem "Content"-Ordner des Projekts.
+const FString DNA_PROJECT_ROOT = TEXT("/Game/DualNode/Audio/Defaults/");
+
 UDualNodeAudioSettings::UDualNodeAudioSettings(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
@@ -11,33 +15,41 @@ UDualNodeAudioSettings::UDualNodeAudioSettings(const FObjectInitializer& ObjectI
 
 	bWarnOnMissingTags = true;
 	bEnablePhysicsMaterialSupport = true;
-
-	GlobalSoundMix = TSoftObjectPtr<USoundMix>(FSoftObjectPath(TEXT("/DualNodeAudio/Defaults/Mixing/Mix_GlobalMaster.Mix_GlobalMaster")));
-
-	// --- NEU: Master Tag Mapping ---
-	const FName MasterTag = FName("Audio.Master");
-	const FString MasterPath = TEXT("/DualNodeAudio/Defaults/Mixing/SC_Master.SC_Master");
-	TagToSoundClassDefaults.Add(FGameplayTag::RequestGameplayTag(MasterTag), TSoftObjectPtr<USoundClass>(FSoftObjectPath(MasterPath)));
-
-	// Music
-	const FName MusicTag = FName("Audio.Music");
-	const FString MusicPath = TEXT("/DualNodeAudio/Defaults/Mixing/SC_Music.SC_Music");
-	TagToSoundClassDefaults.Add(FGameplayTag::RequestGameplayTag(MusicTag), TSoftObjectPtr<USoundClass>(FSoftObjectPath(MusicPath)));
-
-	// SFX
-	const FName SFXTag = FName("Audio.SFX");
-	const FString SFXPath = TEXT("/DualNodeAudio/Defaults/Mixing/SC_SFX.SC_SFX");
-	TagToSoundClassDefaults.Add(FGameplayTag::RequestGameplayTag(SFXTag), TSoftObjectPtr<USoundClass>(FSoftObjectPath(SFXPath)));
 	
-	// Voice
-	const FName VoiceTag = FName("Audio.Voice");
-	const FString VoicePath = TEXT("/DualNodeAudio/Defaults/Mixing/SC_Voice.SC_Voice");
-	TagToSoundClassDefaults.Add(FGameplayTag::RequestGameplayTag(VoiceTag), TSoftObjectPtr<USoundClass>(FSoftObjectPath(VoicePath)));
+	// Helper Lambda für sauberen Code
+	auto MakeDNAPath = [&](const FString& FileName) -> FSoftObjectPath
+	{
+		return FSoftObjectPath(DNA_PROJECT_ROOT + FileName + "." + FileName);
+	};
 
-	// UI
-	const FName UITag = FName("Audio.UI");
-	const FString UIPath = TEXT("/DualNodeAudio/Defaults/Mixing/SC_UI.SC_UI");
-	TagToSoundClassDefaults.Add(FGameplayTag::RequestGameplayTag(UITag), TSoftObjectPtr<USoundClass>(FSoftObjectPath(UIPath)));
+	// --- DEFAULTS ---
+	// Diese zeigen jetzt auf Content/DualNode/Audio/Defaults/...
+	GlobalSoundMix = TSoftObjectPtr<USoundMix>(MakeDNAPath("Mix_GlobalMaster"));
+
+	TagToSoundClassDefaults.Add(
+		FGameplayTag::RequestGameplayTag(FName("Audio.Master")),
+		TSoftObjectPtr<USoundClass>(MakeDNAPath("SC_Master"))
+	);
+
+	TagToSoundClassDefaults.Add(
+		FGameplayTag::RequestGameplayTag(FName("Audio.Music")),
+		TSoftObjectPtr<USoundClass>(MakeDNAPath("SC_Music"))
+	);
+
+	TagToSoundClassDefaults.Add(
+		FGameplayTag::RequestGameplayTag(FName("Audio.SFX")),
+		TSoftObjectPtr<USoundClass>(MakeDNAPath("SC_SFX"))
+	);
+	
+	TagToSoundClassDefaults.Add(
+		FGameplayTag::RequestGameplayTag(FName("Audio.Voice")),
+		TSoftObjectPtr<USoundClass>(MakeDNAPath("SC_Voice"))
+	);
+
+	TagToSoundClassDefaults.Add(
+		FGameplayTag::RequestGameplayTag(FName("Audio.UI")),
+		TSoftObjectPtr<USoundClass>(MakeDNAPath("SC_UI"))
+	);
 }
 
 #if WITH_EDITOR

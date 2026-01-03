@@ -7,14 +7,10 @@
 #include "GameplayTagContainer.h"
 #include "Sound/SoundMix.h"
 #include "Sound/SoundClass.h"
-#include "Engine/EngineTypes.h" // Für ECollisionChannel
+#include "Engine/EngineTypes.h"
 #include "DualNodeAudioRegistry.h"
 #include "DualNodeAudioSettings.generated.h"
 
-/**
- * Konfiguration für das DualNode Audio System.
- * Erscheint in Project Settings -> Game -> Dual Node Audio.
- */
 UCLASS(Config=Game, defaultconfig, meta=(DisplayName="Dual Node Audio"))
 class DUALNODEAUDIO_API UDualNodeAudioSettings : public UDeveloperSettings
 {
@@ -23,19 +19,19 @@ class DUALNODEAUDIO_API UDualNodeAudioSettings : public UDeveloperSettings
 public:
 	UDualNodeAudioSettings(const FObjectInitializer& ObjectInitializer);
 
-	// --- HELPER ---
 	static const UDualNodeAudioSettings* Get() { return GetDefault<UDualNodeAudioSettings>(); }
 
-	// --- ASSET SETUP ---
-	/** Der globale SoundMix, der beim Start geladen werden soll */
-	UPROPERTY(Config, EditAnywhere, Category = "Audio Setup", meta = (AllowedClasses = "/Script/Engine.SoundMix"))
+	// --- ASSET SETUP (Advanced Display) ---
+	// Wir verstecken diese Pfade im "Advanced" Bereich (kleiner Pfeil),
+	// da sie standardmäßig gesetzt werden und selten geändert werden müssen.
+
+	UPROPERTY(Config, EditAnywhere, Category = "Audio Setup", meta = (AllowedClasses = "/Script/Engine.SoundMix", AdvancedDisplay))
 	TSoftObjectPtr<USoundMix> GlobalSoundMix;
 
-	/** Mapping von GameplayTags zu Standard SoundClasses */
-	UPROPERTY(Config, EditAnywhere, Category = "Audio Setup")
+	UPROPERTY(Config, EditAnywhere, Category = "Audio Setup", meta = (AdvancedDisplay))
 	TMap<FGameplayTag, TSoftObjectPtr<USoundClass>> TagToSoundClassDefaults;
 	
-	/** Liste der aktiven Audio Registries (Data Assets) */
+	/** Liste der aktiven Audio Registries */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Audio Setup")
 	TArray<TSoftObjectPtr<UDualNodeAudioRegistry>> Registries;
 

@@ -3,6 +3,8 @@
 #include "Components/BrushComponent.h"
 #include "DualNodeMusicManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "GameFramework/Pawn.h"
+#include "Engine/GameInstance.h"
 
 ADualNodeAudioVolume::ADualNodeAudioVolume()
 {

@@ -5,6 +5,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "DualNodeAudioSettings.h"
+#include "Engine/GameInstance.h"
+#include "Engine/World.h"
 
 UDualNodeFoleyComponent::UDualNodeFoleyComponent()
 {

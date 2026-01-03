@@ -2,6 +2,7 @@
 #include "DualNodeAudioSubsystem.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
+#include "Engine/GameInstance.h"
 
 UDualNodePlayerAudioComponent::UDualNodePlayerAudioComponent()
 {

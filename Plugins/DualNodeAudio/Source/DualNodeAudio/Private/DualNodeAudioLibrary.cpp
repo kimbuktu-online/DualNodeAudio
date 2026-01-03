@@ -8,6 +8,8 @@
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "DrawDebugHelpers.h"
+#include "Engine/GameInstance.h" 
+#include "Engine/Engine.h"
 
 UDualNodeAudioSubsystem* GetDNASubsystem(const UObject* WorldContext)
 {

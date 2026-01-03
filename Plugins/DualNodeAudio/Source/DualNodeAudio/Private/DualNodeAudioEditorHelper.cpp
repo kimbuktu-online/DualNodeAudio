@@ -10,63 +10,121 @@
 #include "Sound/SoundMix.h"
 #include "UObject/SavePackage.h"
 #include "Misc/PackageName.h"
+#include "FileHelpers.h"
 #endif
+
+// ZIEL: Content/DualNode/Audio/Defaults/
+const FString DNA_GENERATION_PATH = TEXT("/Game/DualNode/Audio/Defaults"); 
 
 void UDualNodeAudioEditorHelper::GenerateDefaultAudioAssets()
 {
 #if WITH_EDITOR
 	FAssetToolsModule& AssetToolsModule = FModuleManager::Get().LoadModuleChecked<FAssetToolsModule>("AssetTools");
 
-	const FString PluginContentPath = TEXT("/DualNodeAudio/Defaults/Mixing"); 
+	// HINWEIS: Wir prüfen nicht mehr auf Plugin-Validität, da /Game/ immer existiert.
+	
+	TArray<USoundClass*> CreatedClasses;
 
+	// Helper Lambda
 	auto CreateSoundClass = [&](FString Name, USoundClass* Parent) -> USoundClass*
 	{
-		FString PackageName = PluginContentPath + "/" + Name;
+		FString PackageName = DNA_GENERATION_PATH + "/" + Name;
+		USoundClass* ResultSC = nullptr;
+
         if (FPackageName::DoesPackageExist(PackageName))
         {
-            return LoadObject<USoundClass>(nullptr, * (PackageName + "." + Name));
+            ResultSC = LoadObject<USoundClass>(nullptr, * (PackageName + "." + Name));
         }
-
-		USoundClassFactory* Factory = NewObject<USoundClassFactory>();
-		UObject* NewAsset = AssetToolsModule.Get().CreateAsset(Name, PluginContentPath, USoundClass::StaticClass(), Factory);
+		else
+		{
+			// AssetTools erstellt automatisch fehlende Unterordner (DualNode/Audio/...)
+			USoundClassFactory* Factory = NewObject<USoundClassFactory>();
+			UObject* NewAsset = AssetToolsModule.Get().CreateAsset(Name, DNA_GENERATION_PATH, USoundClass::StaticClass(), Factory);
+			ResultSC = Cast<USoundClass>(NewAsset);
+		}
 		
-		if (USoundClass* SC = Cast<USoundClass>(NewAsset))
+		if (ResultSC)
 		{
 			if (Parent)
 			{
-				SC->ParentClass = Parent;
+				ResultSC->ParentClass = Parent;
+				if (!Parent->ChildClasses.Contains(ResultSC))
+				{
+					Parent->ChildClasses.Add(ResultSC);
+					Parent->MarkPackageDirty();
+				}
 			}
-            SC->MarkPackageDirty();
-			return SC;
+            ResultSC->MarkPackageDirty();
+			CreatedClasses.Add(ResultSC);
+			return ResultSC;
 		}
 		return nullptr;
 	};
 
-	// Create Classes
+	// 1. Hierarchie erstellen
 	USoundClass* SC_Master = CreateSoundClass("SC_Master", nullptr);
-	USoundClass* SC_Music = CreateSoundClass("SC_Music", SC_Master);
-	USoundClass* SC_SFX   = CreateSoundClass("SC_SFX", SC_Master);
-	USoundClass* SC_Voice = CreateSoundClass("SC_Voice", SC_Master);
-    CreateSoundClass("SC_UI", SC_SFX); 
+	USoundClass* SC_Music  = CreateSoundClass("SC_Music", SC_Master);
+	USoundClass* SC_SFX    = CreateSoundClass("SC_SFX", SC_Master);
+	USoundClass* SC_Voice  = CreateSoundClass("SC_Voice", SC_Master);
+    USoundClass* SC_UI     = CreateSoundClass("SC_UI", SC_SFX); 
 
-	// Create Global Mix
+	// 2. Global Mix erstellen
     FString MixName = "Mix_GlobalMaster";
-    FString MixPackageName = PluginContentPath + "/" + MixName;
+    FString MixPackageName = DNA_GENERATION_PATH + "/" + MixName;
+	USoundMix* Mix = nullptr;
     
-    if (!FPackageName::DoesPackageExist(MixPackageName))
+    if (FPackageName::DoesPackageExist(MixPackageName))
     {
+		Mix = LoadObject<USoundMix>(nullptr, * (MixPackageName + "." + MixName));
+	}
+	else
+	{
         USoundMixFactory* MixFactory = NewObject<USoundMixFactory>();
-        UObject* NewMix = AssetToolsModule.Get().CreateAsset(MixName, PluginContentPath, USoundMix::StaticClass(), MixFactory);
-        
-        if (USoundMix* Mix = Cast<USoundMix>(NewMix))
-        {
-            Mix->bApplyEQ = true;
-        	// FIX C2039: Wir entfernen die EQ-Zuweisung, da sie optional ist und Versionskonflikte verursacht.
-            // Der Mix funktioniert auch mit Default-EQ Werten.
-            Mix->MarkPackageDirty();
-        }
+        UObject* NewMix = AssetToolsModule.Get().CreateAsset(MixName, DNA_GENERATION_PATH, USoundMix::StaticClass(), MixFactory);
+		Mix = Cast<USoundMix>(NewMix);
+	}
+
+    if (Mix)
+    {
+        Mix->bApplyEQ = false; 
+		// FIX: Zeile gelöscht, da Property nicht in USoundMix existiert.
+		// Die Logik wird unten in 'NewAdj.bApplyToChildren' behandelt.
+		Mix->Duration = -1.0f;
+
+		for (USoundClass* SC : CreatedClasses)
+		{
+			bool bFound = false;
+			for (const FSoundClassAdjuster& Adj : Mix->SoundClassEffects)
+			{
+				if (Adj.SoundClassObject == SC) { bFound = true; break; }
+			}
+
+			if (!bFound)
+			{
+				FSoundClassAdjuster NewAdj;
+				NewAdj.SoundClassObject = SC;
+				NewAdj.VolumeAdjuster = 1.0f;
+				NewAdj.PitchAdjuster = 1.0f;
+				
+				// HIER ist der korrekte Ort für die Property:
+				NewAdj.bApplyToChildren = true;
+				
+				Mix->SoundClassEffects.Add(NewAdj);
+			}
+		}
+        Mix->MarkPackageDirty();
     }
 
-	UE_LOG(LogTemp, Display, TEXT("DNA: Default Assets generated at %s"), *PluginContentPath);
+	// 3. Speichern
+	TArray<UPackage*> PackagesToSave;
+	for (USoundClass* SC : CreatedClasses) if (SC) PackagesToSave.Add(SC->GetPackage());
+	if (Mix) PackagesToSave.Add(Mix->GetPackage());
+	
+	if (PackagesToSave.Num() > 0)
+	{
+		FEditorFileUtils::PromptForCheckoutAndSave(PackagesToSave, false, false);
+	}
+
+	UE_LOG(LogTemp, Display, TEXT("DNA: Default Assets verified at Project Location: %s"), *DNA_GENERATION_PATH);
 #endif
 }
