@@ -153,30 +153,51 @@ void FDualNodeAudioModule::CheckAndGenerateAssets()
 		}
 	}
 
-	// --- STEP B: Auto-Link in Project Settings (NEU) ---
+	// --- STEP B: Auto-Link in Project Settings ---
 	
 	UDualNodeAudioSettings* Settings = GetMutableDefault<UDualNodeAudioSettings>();
 	bool bSettingsChanged = false;
 
-	// 1. Global Mix verlinken (nur wenn leer)
-	if (Settings->GlobalSoundMix.IsNull() && GlobalMix)
+	// 1. Global Mix verlinken
+	// FIX: Wir prüfen nicht auf IsNull(), da der Konstruktor einen Pfad setzt.
+	// Wir prüfen, ob der Pfad exakt übereinstimmt. Wenn nicht -> Update erzwingen.
+	if (GlobalMix)
 	{
-		Settings->GlobalSoundMix = GlobalMix;
-		bSettingsChanged = true;
+		FSoftObjectPath CurrentMixPath = Settings->GlobalSoundMix.ToSoftObjectPath();
+		FSoftObjectPath NewMixPath(GlobalMix);
+
+		// Wenn der Pfad abweicht oder (wichtig!) wenn das Asset zwar im Pfad steht, 
+		// aber noch nicht als "Use" markiert wurde (Dirty Config), setzen wir es neu.
+		if (CurrentMixPath != NewMixPath)
+		{
+			Settings->GlobalSoundMix = GlobalMix;
+			bSettingsChanged = true;
+		}
 	}
 
-	// 2. Tags zu SoundClasses mappen (nur wenn Eintrag fehlt oder leer ist)
+	// 2. Tags zu SoundClasses mappen
 	auto LinkTagToClass = [&](FName TagName, USoundClass* ClassAsset)
 	{
 		if (!ClassAsset) return;
 		FGameplayTag Tag = FGameplayTag::RequestGameplayTag(TagName);
 		
-		// Wenn der Key nicht existiert ODER der Wert Null ist -> Setzen.
-		// Wenn der User da schon was anderes eingestellt hat -> Finger weg.
-		if (!Settings->TagToSoundClassDefaults.Contains(Tag) || Settings->TagToSoundClassDefaults[Tag].IsNull())
+		// Fall A: Tag fehlt in der Map -> Hinzufügen
+		if (!Settings->TagToSoundClassDefaults.Contains(Tag))
 		{
 			Settings->TagToSoundClassDefaults.Add(Tag, ClassAsset);
 			bSettingsChanged = true;
+		}
+		// Fall B: Tag ist da, aber zeigt auf falschen/leeren Pfad -> Korrigieren
+		else
+		{
+			FSoftObjectPath CurrentPath = Settings->TagToSoundClassDefaults[Tag].ToSoftObjectPath();
+			FSoftObjectPath NewPath(ClassAsset);
+
+			if (CurrentPath != NewPath)
+			{
+				Settings->TagToSoundClassDefaults[Tag] = ClassAsset;
+				bSettingsChanged = true;
+			}
 		}
 	};
 
@@ -189,8 +210,8 @@ void FDualNodeAudioModule::CheckAndGenerateAssets()
 	// 3. Settings speichern
 	if (bSettingsChanged)
 	{
-		Settings->TryUpdateDefaultConfigFile(); // Schreibt in DefaultGame.ini
-		UE_LOG(LogTemp, Log, TEXT("DNA: Auto-configured Project Settings with default assets."));
+		Settings->TryUpdateDefaultConfigFile(); 
+		UE_LOG(LogTemp, Log, TEXT("DNA: Project Settings updated to match generated assets."));
 	}
 }
 #endif
