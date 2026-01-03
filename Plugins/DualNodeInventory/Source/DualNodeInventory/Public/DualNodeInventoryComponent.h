@@ -19,13 +19,15 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	/** Prüft rein logisch, ob ein Item hinzugefügt werden könnte (Wichtig für UI) */
+	/** UI-Feedback: Kann dieser Gegenstand aufgenommen werden? */
 	UFUNCTION(BlueprintPure, Category="Inventory")
 	bool CanAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount, FText& OutFailureReason) const;
 
+	/** Server-Authoritative Add */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Inventory")
 	bool TryAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount = 1);
 
+	/** Server-Authoritative Remove */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Inventory")
 	bool RemoveItem(const UDualNodeItemDefinition* ItemDef, int32 Amount = 1);
 
@@ -35,8 +37,10 @@ public:
 	UFUNCTION(BlueprintPure, Category="Inventory")
 	int32 GetTotalAmountOfItem(const UDualNodeItemDefinition* ItemDef) const;
 
+	UFUNCTION(BlueprintPure, Category="Inventory")
 	int32 GetTotalAmountOfItemById(FPrimaryAssetId ItemId) const;
 
+	/** Persistence API */
 	UFUNCTION(BlueprintCallable, Category="Inventory|Persistence")
 	FDualNodeInventorySaveData GetInventorySnapshot() const;
 
@@ -44,6 +48,9 @@ public:
 	void LoadInventoryFromSnapshot(const FDualNodeInventorySaveData& Snapshot);
 
 	const TArray<FDualNodeItemInstance>& GetItems() const { return InventoryArray.Items; }
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void OnRep_Inventory();
 
 protected:
 	UPROPERTY(ReplicatedUsing=OnRep_Inventory)
@@ -54,9 +61,6 @@ protected:
 
 	UPROPERTY(EditAnywhere, Instanced, Category="Inventory|Config")
 	TArray<TObjectPtr<UDualNodeInventoryValidator>> Validators;
-
-	UFUNCTION()
-	void OnRep_Inventory();
 
 	UPROPERTY(BlueprintAssignable, Category="Inventory")
 	FOnInventoryUpdated OnInventoryUpdated;

@@ -19,109 +19,78 @@ bool UDualNodeInventoryComponent::CanAddItem(const UDualNodeItemDefinition* Item
 {
 	if (!ItemDef || Amount <= 0) return false;
 
-	// 1. Validatoren prüfen
 	for (const TObjectPtr<UDualNodeInventoryValidator>& ValidatorPtr : Validators)
 	{
 		if (ValidatorPtr && !ValidatorPtr->CanAddItem(this, ItemDef, Amount, OutFailureReason)) return false;
 	}
 
-	// 2. Platz prüfen (Stacking oder Free Slot)
 	if (ItemDef->bCanStack && FindStackableSlot(ItemDef) != INDEX_NONE) return true;
 	if (FindFreeSlot() != INDEX_NONE) return true;
 
-	OutFailureReason = NSLOCTEXT("Inventory", "Full", "Inventar ist voll.");
+	OutFailureReason = NSLOCTEXT("Inventory", "Full", "Inventar voll.");
 	return false;
 }
 
 bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount)
 {
-	if (!GetOwner()->HasAuthority()) return false;
+	if (!GetOwner()->HasAuthority() || !ItemDef) return false;
 
-	FText DummyReason;
-	if (!CanAddItem(ItemDef, Amount, DummyReason)) return false;
+	FText Dummy;
+	if (!CanAddItem(ItemDef, Amount, Dummy)) return false;
 
-	FPrimaryAssetId TargetId = ItemDef->GetPrimaryAssetId();
-	int32 RemainingAmount = Amount;
+	int32 Remaining = Amount;
+	FPrimaryAssetId Id = ItemDef->GetPrimaryAssetId();
 
-	// Stacking
 	if (ItemDef->bCanStack)
 	{
-		int32 StackSlot = FindStackableSlot(ItemDef);
-		while (StackSlot != INDEX_NONE && RemainingAmount > 0)
+		for (FDualNodeItemInstance& Slot : InventoryArray.Items)
 		{
-			FDualNodeItemInstance& Slot = InventoryArray.Items[StackSlot];
-			int32 ToAdd = FMath::Min(RemainingAmount, ItemDef->MaxStackSize - Slot.StackCount);
-			Slot.StackCount += ToAdd;
-			RemainingAmount -= ToAdd;
-			InventoryArray.MarkItemDirty(Slot);
-			StackSlot = FindStackableSlot(ItemDef);
+			if (Slot.ItemId == Id && Slot.StackCount < ItemDef->MaxStackSize)
+			{
+				int32 ToAdd = FMath::Min(Remaining, ItemDef->MaxStackSize - Slot.StackCount);
+				Slot.StackCount += ToAdd;
+				Remaining -= ToAdd;
+				InventoryArray.MarkItemDirty(Slot);
+				if (Remaining <= 0) break;
+			}
 		}
 	}
 
-	// Neue Slots
-	while (RemainingAmount > 0)
+	while (Remaining > 0 && InventoryArray.Items.Num() < MaxSlotCount)
 	{
-		int32 FreeSlot = FindFreeSlot();
-		if (FreeSlot == INDEX_NONE) break;
-
 		FDualNodeItemInstance& NewItem = InventoryArray.Items.AddDefaulted_GetRef();
-		NewItem.ItemId = TargetId;
+		NewItem.ItemId = Id;
 		NewItem.CachedDefinition = ItemDef;
-		NewItem.StackCount = FMath::Min(RemainingAmount, ItemDef->MaxStackSize);
-		NewItem.InstanceGuid = FGuid::NewGuid();
-		RemainingAmount -= NewItem.StackCount;
+		NewItem.StackCount = FMath::Min(Remaining, ItemDef->MaxStackSize);
+		Remaining -= NewItem.StackCount;
 		InventoryArray.MarkArrayDirty();
 	}
 
 	OnRep_Inventory();
-	return (RemainingAmount < Amount);
+	return true;
 }
 
 bool UDualNodeInventoryComponent::RemoveItem(const UDualNodeItemDefinition* ItemDef, int32 Amount)
 {
-	if (!GetOwner()->HasAuthority() || !ItemDef || Amount <= 0) return false;
+	if (!GetOwner()->HasAuthority() || !ItemDef) return false;
 
-	FPrimaryAssetId TargetId = ItemDef->GetPrimaryAssetId();
-	int32 RemainingToRemove = Amount;
+	FPrimaryAssetId Id = ItemDef->GetPrimaryAssetId();
+	int32 Remaining = Amount;
 
 	for (int32 i = InventoryArray.Items.Num() - 1; i >= 0; --i)
 	{
-		if (InventoryArray.Items[i].ItemId == TargetId)
+		if (InventoryArray.Items[i].ItemId == Id)
 		{
-			int32 ToRemove = FMath::Min(RemainingToRemove, InventoryArray.Items[i].StackCount);
+			int32 ToRemove = FMath::Min(Remaining, InventoryArray.Items[i].StackCount);
 			InventoryArray.Items[i].StackCount -= ToRemove;
-			RemainingToRemove -= ToRemove;
-
+			Remaining -= ToRemove;
 			if (InventoryArray.Items[i].StackCount <= 0) { InventoryArray.Items.RemoveAt(i); InventoryArray.MarkArrayDirty(); }
 			else { InventoryArray.MarkItemDirty(InventoryArray.Items[i]); }
-			if (RemainingToRemove <= 0) break;
+			if (Remaining <= 0) break;
 		}
 	}
-
-	if (RemainingToRemove < Amount) { OnRep_Inventory(); return true; }
-	return false;
-}
-
-int32 UDualNodeInventoryComponent::FindStackableSlot(const UDualNodeItemDefinition* ItemDef) const
-{
-	FPrimaryAssetId TargetId = ItemDef->GetPrimaryAssetId();
-	for (int32 i = 0; i < InventoryArray.Items.Num(); ++i)
-	{
-		if (InventoryArray.Items[i].ItemId == TargetId && InventoryArray.Items[i].StackCount < ItemDef->MaxStackSize) return i;
-	}
-	return INDEX_NONE;
-}
-
-int32 UDualNodeInventoryComponent::FindFreeSlot() const
-{
-	return (InventoryArray.Items.Num() < MaxSlotCount) ? InventoryArray.Items.Num() : INDEX_NONE;
-}
-
-float UDualNodeInventoryComponent::GetTotalWeight() const
-{
-	float Weight = 0.0f;
-	for (const auto& Item : InventoryArray.Items) if (Item.CachedDefinition) Weight += (Item.CachedDefinition->ItemWeight * Item.StackCount);
-	return Weight;
+	OnRep_Inventory();
+	return true;
 }
 
 int32 UDualNodeInventoryComponent::GetTotalAmountOfItem(const UDualNodeItemDefinition* ItemDef) const
@@ -136,13 +105,21 @@ int32 UDualNodeInventoryComponent::GetTotalAmountOfItemById(FPrimaryAssetId Item
 	return Total;
 }
 
+float UDualNodeInventoryComponent::GetTotalWeight() const
+{
+	float Weight = 0.0f;
+	for (const auto& Item : InventoryArray.Items) if (Item.CachedDefinition) Weight += (Item.CachedDefinition->ItemWeight * Item.StackCount);
+	return Weight;
+}
+
 FDualNodeInventorySaveData UDualNodeInventoryComponent::GetInventorySnapshot() const
 {
 	FDualNodeInventorySaveData Snapshot;
 	for (const auto& Item : InventoryArray.Items)
 	{
-		FDualNodeItemSaveData& Data = Snapshot.SavedItems.AddDefaulted_GetRef();
+		FDualNodeItemSaveData Data;
 		Data.ItemId = Item.ItemId; Data.StackCount = Item.StackCount; Data.InstanceGuid = Item.InstanceGuid;
+		Snapshot.SavedItems.Add(Data);
 	}
 	return Snapshot;
 }
@@ -151,10 +128,10 @@ void UDualNodeInventoryComponent::LoadInventoryFromSnapshot(const FDualNodeInven
 {
 	if (!GetOwner()->HasAuthority()) return;
 	InventoryArray.Items.Empty();
-	for (const auto& Saved : Snapshot.SavedItems)
+	for (const auto& S : Snapshot.SavedItems)
 	{
 		FDualNodeItemInstance& NewItem = InventoryArray.Items.AddDefaulted_GetRef();
-		NewItem.ItemId = Saved.ItemId; NewItem.StackCount = Saved.StackCount; NewItem.InstanceGuid = Saved.InstanceGuid;
+		NewItem.ItemId = S.ItemId; NewItem.StackCount = S.StackCount; NewItem.InstanceGuid = S.InstanceGuid;
 		NewItem.ResolveDefinition();
 	}
 	InventoryArray.MarkArrayDirty();
@@ -165,4 +142,17 @@ void UDualNodeInventoryComponent::OnRep_Inventory()
 {
 	for (FDualNodeItemInstance& Slot : InventoryArray.Items) Slot.ResolveDefinition();
 	OnInventoryUpdated.Broadcast(this);
+}
+
+int32 UDualNodeInventoryComponent::FindStackableSlot(const UDualNodeItemDefinition* ItemDef) const
+{
+	FPrimaryAssetId Id = ItemDef->GetPrimaryAssetId();
+	for (int32 i = 0; i < InventoryArray.Items.Num(); ++i)
+		if (InventoryArray.Items[i].ItemId == Id && InventoryArray.Items[i].StackCount < ItemDef->MaxStackSize) return i;
+	return INDEX_NONE;
+}
+
+int32 UDualNodeInventoryComponent::FindFreeSlot() const
+{
+	return (InventoryArray.Items.Num() < MaxSlotCount) ? InventoryArray.Items.Num() : INDEX_NONE;
 }

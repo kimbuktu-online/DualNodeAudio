@@ -22,6 +22,10 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="DualNode|Inventory")
 	static void SortInventory(UDualNodeInventoryComponent* Inventory);
 
+	/** Nutzt einen Gegenstand und führt dessen Aktionen aus */
+	UFUNCTION(BlueprintCallable, Category = "DualNode|Inventory")
+	static bool UseItem(AActor* User, const UDualNodeItemDefinition* ItemDef);
+
 	UFUNCTION(BlueprintCallable, Category="DualNode|Audio")
 	static void PlayItemSound(const UDualNodeItemDefinition* Item, FGameplayTag ActionTag, AActor* ContextActor);
 };
