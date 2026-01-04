@@ -115,14 +115,25 @@ void UDualNodeInventoryComponent::Server_SwapSlots_Implementation(int32 From, in
 void UDualNodeInventoryComponent::Server_DropFromSlot_Implementation(int32 SlotIndex, int32 Amount)
 {
 	if (!InventoryArray.Items.IsValidIndex(SlotIndex)) return;
+	
 	FDualNodeItemInstance& Slot = InventoryArray.Items[SlotIndex];
-	if (!Slot.CachedDefinition || Amount <= 0) return;
+	if (!Slot.CachedDefinition || Amount <= 0 || Slot.StackCount <= 0) return;
 
 	int32 DropAmount = FMath::Min(Amount, Slot.StackCount);
-	if (UDualNodeInventoryLibrary::DropItem(GetOwner(), Slot.CachedDefinition, DropAmount))
+	
+	// FIX: Wir nutzen SpawnItemInWorld (nur Spawn!), anstatt DropItem (Spawn + globaler Abzug)
+	FVector SpawnLoc = GetOwner()->GetActorLocation() + (GetOwner()->GetActorForwardVector() * 100.0f);
+	
+	if (UDualNodeInventoryLibrary::SpawnItemInWorld(GetOwner(), Slot.CachedDefinition, DropAmount, SpawnLoc))
 	{
+		// Jetzt ziehen wir NUR von diesem spezifischen Slot ab
 		Slot.StackCount -= DropAmount;
-		if (Slot.StackCount <= 0) Slot = FDualNodeItemInstance();
+		
+		if (Slot.StackCount <= 0) 
+		{
+			Slot = FDualNodeItemInstance();
+		}
+
 		InventoryArray.MarkItemDirty(Slot);
 		OnRep_Inventory();
 	}
@@ -131,12 +142,16 @@ void UDualNodeInventoryComponent::Server_DropFromSlot_Implementation(int32 SlotI
 void UDualNodeInventoryComponent::Server_UseItemInSlot_Implementation(int32 SlotIndex)
 {
 	if (!InventoryArray.Items.IsValidIndex(SlotIndex)) return;
+	
 	FDualNodeItemInstance& Slot = InventoryArray.Items[SlotIndex];
 	if (Slot.CachedDefinition)
 	{
-		UDualNodeInventoryLibrary::UseItem(GetOwner(), Slot.CachedDefinition);
-		if (Slot.StackCount <= 0) Slot = FDualNodeItemInstance();
-		InventoryArray.MarkItemDirty(Slot);
+		// Wir geben den SlotIndex mit, damit das System weiß, woher es kommt
+		UDualNodeInventoryLibrary::UseItem(GetOwner(), Slot.CachedDefinition, SlotIndex);
+		
+		// Falls das Item verbraucht wurde (durch UseItem -> RemoveItem), 
+		// müssen wir sicherstellen, dass wir synchron sind. 
+		// OnRep_Inventory() sorgt für den Refresh der ViewModels.
 		OnRep_Inventory();
 	}
 }

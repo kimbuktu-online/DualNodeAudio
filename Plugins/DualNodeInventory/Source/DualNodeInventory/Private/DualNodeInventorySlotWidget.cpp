@@ -1,7 +1,7 @@
 ﻿#include "DualNodeInventorySlotWidget.h"
 #include "DualNodeInventoryComponent.h"
 #include "DualNodeInventoryWidget.h"
-#include "Blueprint/WidgetBlueprintLibrary.h"
+#include "DualNodeInventorySlotViewModel.h"
 #include "Blueprint/DragDropOperation.h"
 
 void UDualNodeInventorySlotWidget::NativeOnListItemObjectSet(UObject* ListItemObject)
@@ -15,22 +15,23 @@ void UDualNodeInventorySlotWidget::NativeOnListItemObjectSet(UObject* ListItemOb
 
 FReply UDualNodeInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
+	// RECHTSKLICK -> Kontextmenü
 	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
 	{
-		OnRightClicked();
-		return FReply::Handled();
+		if (SlotViewModel && SlotViewModel->StackCount > 0)
+		{
+			if (UDualNodeInventoryWidget* ParentWidget = Cast<UDualNodeInventoryWidget>(GetTypedOuter<UDualNodeInventoryWidget>()))
+			{
+				// Wir senden die Screen-Position (Monitor-Pixel)
+				ParentWidget->OpenContextMenu(SlotViewModel, InMouseEvent.GetScreenSpacePosition());
+				return FReply::Handled();
+			}
+		}
 	}
 
+	// LINKSKLICK -> Drag/Drop oder Transfer
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
-		// Shift + Klick -> Quick Move
-		if (InMouseEvent.IsShiftDown())
-		{
-			// Hier Logik für QuickMove (z.B. in Truhe verschieben) einbauen
-			return FReply::Handled();
-		}
-
-		// Normaler Klick -> An Haupt-Widget delegieren für Held Item Logic
 		if (UDualNodeInventoryWidget* ParentWidget = Cast<UDualNodeInventoryWidget>(GetTypedOuter<UDualNodeInventoryWidget>()))
 		{
 			ParentWidget->HandleSlotClick(SlotViewModel);

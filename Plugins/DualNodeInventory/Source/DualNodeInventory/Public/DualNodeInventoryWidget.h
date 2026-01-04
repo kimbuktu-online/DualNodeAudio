@@ -4,7 +4,6 @@
 #include "CommonUserWidget.h"
 #include "CommonTileView.h"
 #include "DualNodeInventoryViewModel.h"
-#include "FieldNotificationId.h"
 #include "DualNodeInventoryWidget.generated.h"
 
 UCLASS(Abstract, Blueprintable)
@@ -16,11 +15,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DualNode|Inventory")
 	void InitializeInventory(class UDualNodeInventoryComponent* InventoryComponent);
 
-	/** Wird vom Slot aufgerufen, wenn er angeklickt wird */
+	/** Öffnet das Kontextmenü exakt an der Cursorposition */
+	UFUNCTION(BlueprintCallable, Category = "DualNode|Inventory")
+	void OpenContextMenu(UDualNodeInventorySlotViewModel* SlotVM, FVector2D ScreenPosition);
+
 	void HandleSlotClick(UDualNodeInventorySlotViewModel* ClickedSlot);
 
 protected:
-	// --- INPUT OVERRIDES ---
 	virtual FReply NativeOnMouseWheel(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
@@ -30,24 +31,28 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "DualNode|Inventory")
 	TObjectPtr<UDualNodeInventoryViewModel> MainViewModel;
 
+	// --- CONTEXT MENU CONFIG ---
+	
+	UPROPERTY(EditAnywhere, Category = "DualNode|Inventory|Config")
+	TSubclassOf<class UDualNodeContextMenu> ContextMenuClass;
+
+	UPROPERTY()
+	TObjectPtr<class UDualNodeContextMenu> ActiveContextMenu;
+
 	// --- HELD ITEM LOGIC ---
 	
-	/** Das aktuell "aufgehobene" Item-ViewModel */
 	UPROPERTY(BlueprintReadOnly, Category = "DualNode|Inventory")
 	TObjectPtr<UDualNodeInventorySlotViewModel> HeldItemVM;
 
-	/** Die Menge, die man gerade am Cursor hält */
 	UPROPERTY(BlueprintReadOnly, Category = "DualNode|Inventory")
 	int32 TransferAmount = 0;
 
-	/** Blueprint-Klasse für das visuelle Held-Item Widget */
 	UPROPERTY(EditAnywhere, Category = "DualNode|Inventory|Config")
 	TSubclassOf<UUserWidget> HeldItemVisualClass;
 
 	UPROPERTY()
 	TObjectPtr<UUserWidget> HeldItemVisualInstance;
 
-	/** Hilfsfunktion: Aktualisiert das visuelle Feedback am Cursor */
 	UFUNCTION(BlueprintImplementableEvent, Category = "DualNode|Inventory")
 	void OnHeldAmountChanged(int32 NewAmount);
 

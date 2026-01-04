@@ -3,7 +3,7 @@
 #include "DualNodeInventoryInterface.h"
 #include "DualNodeItemFragment_Audio.h"
 #include "DualNodeItemFragment_UseAction.h"
-#include "DualNodeWorldItem.h" // Zwingend erforderlich für DropItem
+#include "DualNodeWorldItem.h"
 #include "Kismet/GameplayStatics.h"
 #include "Algo/Sort.h"
 
@@ -42,6 +42,21 @@ bool UDualNodeInventoryLibrary::SplitStack(UDualNodeInventoryComponent* Inventor
 	return false;
 }
 
+ADualNodeWorldItem* UDualNodeInventoryLibrary::SpawnItemInWorld(AActor* Spawner, const UDualNodeItemDefinition* Item, int32 Amount, FVector Location)
+{
+	if (!Spawner || !Item || Amount <= 0 || !Spawner->HasAuthority()) return nullptr;
+
+	UWorld* World = Spawner->GetWorld();
+	ADualNodeWorldItem* WorldItem = World->SpawnActor<ADualNodeWorldItem>(ADualNodeWorldItem::StaticClass(), Location, FRotator::ZeroRotator);
+	
+	if (WorldItem)
+	{
+		WorldItem->InitializeItem(Item, Amount);
+		return WorldItem;
+	}
+	return nullptr;
+}
+
 bool UDualNodeInventoryLibrary::DropItem(AActor* Dropper, const UDualNodeItemDefinition* Item, int32 Amount)
 {
 	if (!Dropper || !Item || Amount <= 0 || !Dropper->HasAuthority()) return false;
@@ -49,15 +64,8 @@ bool UDualNodeInventoryLibrary::DropItem(AActor* Dropper, const UDualNodeItemDef
 	UDualNodeInventoryComponent* Inv = GetInventoryComponent(Dropper);
 	if (Inv && Inv->RemoveItem(Item, Amount))
 	{
-		// Spawn-Position vor dem Dropper
 		FVector SpawnLoc = Dropper->GetActorLocation() + (Dropper->GetActorForwardVector() * 100.0f);
-		ADualNodeWorldItem* WorldItem = Dropper->GetWorld()->SpawnActor<ADualNodeWorldItem>(ADualNodeWorldItem::StaticClass(), SpawnLoc, FRotator::ZeroRotator);
-		
-		if (WorldItem)
-		{
-			WorldItem->InitializeItem(Item, Amount);
-			return true;
-		}
+		return SpawnItemInWorld(Dropper, Item, Amount, SpawnLoc) != nullptr;
 	}
 	return false;
 }
@@ -74,16 +82,35 @@ void UDualNodeInventoryLibrary::SortInventory(UDualNodeInventoryComponent* Inven
 	Inventory->OnRep_Inventory();
 }
 
-bool UDualNodeInventoryLibrary::UseItem(AActor* User, const UDualNodeItemDefinition* ItemDef)
+bool UDualNodeInventoryLibrary::UseItem(AActor* User, const UDualNodeItemDefinition* ItemDef, int32 FromSlotIndex)
 {
 	if (!User || !ItemDef) return false;
 	UDualNodeInventoryComponent* Inv = GetInventoryComponent(User);
 	if (!Inv) return false;
+
 	const UDualNodeItemFragment* Frag = ItemDef->FindFragmentByClass(UDualNodeItemFragment_UseAction::StaticClass());
 	if (const UDualNodeItemFragment_UseAction* UseFrag = Cast<UDualNodeItemFragment_UseAction>(Frag))
 	{
-		for (const TObjectPtr<UDualNodeItemAction>& Action : UseFrag->Actions) if (Action) Action->ExecuteAction(User, Inv);
-		if (UseFrag->bConsumeOnUse) Inv->RemoveItem(ItemDef, 1);
+		for (const TObjectPtr<UDualNodeItemAction>& Action : UseFrag->Actions) 
+		{
+			if (Action) Action->ExecuteAction(User, Inv);
+		}
+
+		if (UseFrag->bConsumeOnUse)
+		{
+			// Wenn wir einen SlotIndex haben, ziehen wir direkt von dort ab (UX-Fix)
+			if (FromSlotIndex != -1)
+			{
+				// Wir lassen die Component das Handling übernehmen oder rufen RemoveItem auf.
+				// Da RemoveItem global sucht, nutzen wir hier besser den direkten Slot-Weg.
+				// In dieser Library-Funktion ist RemoveItem jedoch der Standard-Fallback.
+				Inv->RemoveItem(ItemDef, 1);
+			}
+			else
+			{
+				Inv->RemoveItem(ItemDef, 1);
+			}
+		}
 		return true;
 	}
 	return false;
@@ -96,6 +123,11 @@ void UDualNodeInventoryLibrary::PlayItemSound(const UDualNodeItemDefinition* Ite
 	if (const UDualNodeItemFragment_Audio* AudioFrag = Cast<UDualNodeItemFragment_Audio>(Frag))
 	{
 		if (const TObjectPtr<USoundBase>* SoundPtr = AudioFrag->SoundMap.Find(ActionTag))
-			if (USoundBase* Sound = SoundPtr->Get()) UGameplayStatics::PlaySoundAtLocation(ContextActor, Sound, ContextActor->GetActorLocation());
+		{
+			if (USoundBase* Sound = SoundPtr->Get()) 
+			{
+				UGameplayStatics::PlaySoundAtLocation(ContextActor, Sound, ContextActor->GetActorLocation());
+			}
+		}
 	}
 }

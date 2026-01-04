@@ -1,6 +1,7 @@
 ﻿#include "DualNodeInventoryWidget.h"
 #include "DualNodeInventoryComponent.h"
 #include "DualNodeInventoryViewModel.h"
+#include "DualNodeContextMenu.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
 
 void UDualNodeInventoryWidget::InitializeInventory(UDualNodeInventoryComponent* InventoryComponent)
@@ -22,20 +23,35 @@ void UDualNodeInventoryWidget::InitializeInventory(UDualNodeInventoryComponent* 
 	if (InventoryTileView) InventoryTileView->SetListItems(MainViewModel->SlotViewModels);
 }
 
+void UDualNodeInventoryWidget::OpenContextMenu(UDualNodeInventorySlotViewModel* SlotVM, FVector2D ScreenPosition)
+{
+	if (!ContextMenuClass || !SlotVM) return;
+
+	if (ActiveContextMenu) ActiveContextMenu->CloseMenu();
+
+	ActiveContextMenu = CreateWidget<UDualNodeContextMenu>(this, ContextMenuClass);
+	if (ActiveContextMenu)
+	{
+		ActiveContextMenu->InitializeMenu(SlotVM);
+		ActiveContextMenu->AddToViewport(1000); 
+
+		// FIX: bRemoveDPIScale = true konvertiert Screen-Pixel korrekt in Viewport-Einheiten
+		ActiveContextMenu->SetPositionInViewport(ScreenPosition, true);
+	}
+}
+
 void UDualNodeInventoryWidget::HandleSlotClick(UDualNodeInventorySlotViewModel* ClickedSlot)
 {
+	if (ActiveContextMenu) { ActiveContextMenu->CloseMenu(); ActiveContextMenu = nullptr; }
 	if (!ClickedSlot || !CachedComponent) return;
 
-	// FALL 1: Wir halten noch nichts -> Item aufnehmen
 	if (!HeldItemVM)
 	{
 		if (ClickedSlot->StackCount > 0)
 		{
 			HeldItemVM = ClickedSlot;
 			HeldItemVM->SetIsSourceOfTransfer(true);
-			TransferAmount = 1; // Startwert
-
-			// Visuelles Widget am Cursor spawnen (falls definiert)
+			TransferAmount = 1;
 			if (HeldItemVisualClass && !HeldItemVisualInstance)
 			{
 				HeldItemVisualInstance = CreateWidget<UUserWidget>(this, HeldItemVisualClass);
@@ -44,10 +60,8 @@ void UDualNodeInventoryWidget::HandleSlotClick(UDualNodeInventorySlotViewModel* 
 			OnHeldAmountChanged(TransferAmount);
 		}
 	}
-	// FALL 2: Wir halten bereits etwas -> Drop / Transfer
 	else
 	{
-		// Auf denselben Slot klicken -> Abbrechen/Zurücklegen
 		if (HeldItemVM == ClickedSlot)
 		{
 			HeldItemVM->SetIsSourceOfTransfer(false);
@@ -55,12 +69,9 @@ void UDualNodeInventoryWidget::HandleSlotClick(UDualNodeInventorySlotViewModel* 
 			if (HeldItemVisualInstance) HeldItemVisualInstance->RemoveFromParent();
 			HeldItemVisualInstance = nullptr;
 		}
-		// Auf anderen Slot klicken -> Transfer ausführen
 		else
 		{
 			CachedComponent->Server_TransferQuantity(HeldItemVM->SlotIndex, ClickedSlot->SlotIndex, TransferAmount);
-			
-			// Reset
 			HeldItemVM->SetIsSourceOfTransfer(false);
 			HeldItemVM = nullptr;
 			if (HeldItemVisualInstance) HeldItemVisualInstance->RemoveFromParent();
@@ -75,10 +86,7 @@ FReply UDualNodeInventoryWidget::NativeOnMouseWheel(const FGeometry& InGeometry,
 	{
 		float ScrollDelta = InMouseEvent.GetWheelDelta();
 		int32 NewAmount = TransferAmount + (ScrollDelta > 0 ? 1 : -1);
-		
-		// Clamp: Zwischen 1 und maximaler Menge im Quell-Slot
 		TransferAmount = FMath::Clamp(NewAmount, 1, HeldItemVM->StackCount);
-		
 		OnHeldAmountChanged(TransferAmount);
 		return FReply::Handled();
 	}
@@ -88,12 +96,10 @@ FReply UDualNodeInventoryWidget::NativeOnMouseWheel(const FGeometry& InGeometry,
 void UDualNodeInventoryWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
-
-	// Held Item dem Cursor folgen lassen
 	if (HeldItemVisualInstance)
 	{
 		FVector2D MousePos = UWidgetLayoutLibrary::GetMousePositionOnViewport(GetWorld());
-		HeldItemVisualInstance->SetPositionInViewport(MousePos + FVector2D(20, 20)); // Kleiner Offset
+		HeldItemVisualInstance->SetPositionInViewport(MousePos + FVector2D(20, 20));
 	}
 }
 

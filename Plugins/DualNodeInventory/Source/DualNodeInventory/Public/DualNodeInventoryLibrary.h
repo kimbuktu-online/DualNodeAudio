@@ -28,9 +28,17 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="DualNode|Inventory")
 	static bool SplitStack(UDualNodeInventoryComponent* Inventory, const UDualNodeItemDefinition* Item, int32 Amount);
 
-	/** Erzeugt einen World-Actor und entfernt das Item aus dem Inventar */
+	/** * High-Level: Entfernt Item aus Inventar UND spawnt es in der Welt. 
+	 * Nutzt intern RemoveItem (sucht im ganzen Inventar).
+	 */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "DualNode|Inventory")
 	static bool DropItem(AActor* Dropper, const UDualNodeItemDefinition* Item, int32 Amount);
+
+	/** * Low-Level: Spawnt NUR den Actor in der Welt. 
+	 * Zieht NICHTS aus dem Inventar ab. Ideal für gezielten Slot-Abzug.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "DualNode|Inventory")
+	static class ADualNodeWorldItem* SpawnItemInWorld(AActor* Spawner, const UDualNodeItemDefinition* Item, int32 Amount, FVector Location);
 
 	/** Sortiert das Inventar stabil nach Kategorie und Name */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="DualNode|Inventory")
@@ -38,7 +46,7 @@ public:
 
 	/** Nutzt einen Gegenstand und triggert dessen 'UseActions' */
 	UFUNCTION(BlueprintCallable, Category = "DualNode|Inventory")
-	static bool UseItem(AActor* User, const UDualNodeItemDefinition* ItemDef);
+	static bool UseItem(AActor* User, const UDualNodeItemDefinition* ItemDef, int32 FromSlotIndex = -1);
 
 	UFUNCTION(BlueprintCallable, Category="DualNode|Audio")
 	static void PlayItemSound(const UDualNodeItemDefinition* Item, FGameplayTag ActionTag, AActor* ContextActor);
