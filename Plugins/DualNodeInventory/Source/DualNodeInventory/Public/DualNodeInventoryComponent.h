@@ -38,7 +38,7 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Inventory")
 	bool RemoveItem(const UDualNodeItemDefinition* ItemDef, int32 Amount = 1);
 
-	// --- NEUE SLOT-LOGIK ---
+	// --- SLOT INTERAKTIONEN (SERVER) ---
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Inventory")
 	void Server_SwapSlots(int32 FromIndex, int32 ToIndex);
@@ -49,10 +49,13 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Inventory")
 	void Server_UseItemInSlot(int32 SlotIndex);
 
+	/** Verschiebt eine Menge zwischen Slots oder Inventaren (für Quick Move & Split) */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Inventory")
+	void Server_TransferQuantity(int32 FromIndex, int32 ToIndex, int32 Quantity, UDualNodeInventoryComponent* TargetInventory = nullptr);
+
 	UFUNCTION(BlueprintPure, Category="Inventory")
 	float GetTotalWeight() const;
 
-	/** Library Kompatibilität */
 	UFUNCTION(BlueprintPure, Category="Inventory")
 	int32 GetTotalAmountOfItem(const UDualNodeItemDefinition* ItemDef) const;
 

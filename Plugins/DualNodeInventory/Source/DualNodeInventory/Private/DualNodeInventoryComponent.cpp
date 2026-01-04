@@ -141,6 +141,44 @@ void UDualNodeInventoryComponent::Server_UseItemInSlot_Implementation(int32 Slot
 	}
 }
 
+void UDualNodeInventoryComponent::Server_TransferQuantity_Implementation(int32 FromIndex, int32 ToIndex, int32 Quantity, UDualNodeInventoryComponent* TargetInventory)
+{
+	if (!InventoryArray.Items.IsValidIndex(FromIndex)) return;
+	
+	UDualNodeInventoryComponent* DestInv = TargetInventory ? TargetInventory : this;
+	if (!DestInv->InventoryArray.Items.IsValidIndex(ToIndex)) return;
+
+	FDualNodeItemInstance& SourceSlot = InventoryArray.Items[FromIndex];
+	FDualNodeItemInstance& DestSlot = DestInv->InventoryArray.Items[ToIndex];
+
+	if (!SourceSlot.CachedDefinition) return;
+
+	int32 MoveAmount = FMath::Min(Quantity, SourceSlot.StackCount);
+
+	// Logik: Entweder in leeren Slot schieben oder auf gleichen Typ stacken
+	if (!DestSlot.ItemId.IsValid() || (DestSlot.ItemId == SourceSlot.ItemId && DestSlot.StackCount < SourceSlot.CachedDefinition->MaxStackSize))
+	{
+		int32 CanFit = DestSlot.ItemId.IsValid() ? SourceSlot.CachedDefinition->MaxStackSize - DestSlot.StackCount : MoveAmount;
+		int32 ActualMove = FMath::Min(MoveAmount, CanFit);
+
+		if (ActualMove <= 0) return;
+
+		DestSlot.ItemId = SourceSlot.ItemId;
+		DestSlot.CachedDefinition = SourceSlot.CachedDefinition;
+		DestSlot.StackCount += ActualMove;
+		if (!DestSlot.InstanceGuid.IsValid()) DestSlot.InstanceGuid = FGuid::NewGuid();
+
+		SourceSlot.StackCount -= ActualMove;
+		if (SourceSlot.StackCount <= 0) SourceSlot = FDualNodeItemInstance();
+
+		InventoryArray.MarkItemDirty(SourceSlot);
+		DestInv->InventoryArray.MarkItemDirty(DestSlot);
+		
+		OnRep_Inventory();
+		if (DestInv != this) DestInv->OnRep_Inventory();
+	}
+}
+
 int32 UDualNodeInventoryComponent::GetTotalAmountOfItem(const UDualNodeItemDefinition* ItemDef) const
 {
 	return ItemDef ? GetTotalAmountOfItemById(ItemDef->GetPrimaryAssetId()) : 0;

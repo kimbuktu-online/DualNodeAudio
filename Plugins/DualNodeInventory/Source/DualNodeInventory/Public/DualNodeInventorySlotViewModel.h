@@ -23,10 +23,17 @@ public:
 	FText QuantityText;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Display")
+	int32 StackCount = 0;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Display")
 	FColor RarityColor;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Logic")
 	bool bIsUsable = false;
+
+	/** NEU: Markiert diesen Slot als Quelle eines laufenden Transfers (für visuelles Feedback) */
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Logic")
+	bool bIsSourceOfTransfer = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Logic")
 	int32 SlotIndex = -1;
@@ -38,6 +45,12 @@ protected:
 	void SetItemIcon(TObjectPtr<UTexture2D> NewValue);
 	void SetItemName(FText NewValue);
 	void SetQuantityText(FText NewValue);
+	void SetStackCount(int32 NewValue);
 	void SetRarityColor(FColor NewValue);
 	void SetIsUsable(bool bNewValue);
+
+public:
+	/** Hilfsfunktion zum Setzen des Ghost-Status */
+	UFUNCTION(BlueprintCallable, Category = "DualNode|Inventory")
+	void SetIsSourceOfTransfer(bool bNewValue) { UE_MVVM_SET_PROPERTY_VALUE(bIsSourceOfTransfer, bNewValue); }
 };

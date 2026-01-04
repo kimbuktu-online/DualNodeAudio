@@ -1,5 +1,6 @@
 ﻿#include "DualNodeInventorySlotWidget.h"
 #include "DualNodeInventoryComponent.h"
+#include "DualNodeInventoryWidget.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Blueprint/DragDropOperation.h"
 
@@ -19,10 +20,24 @@ FReply UDualNodeInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& In
 		OnRightClicked();
 		return FReply::Handled();
 	}
+
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
-		return UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this, EKeys::LeftMouseButton).NativeReply;
+		// Shift + Klick -> Quick Move
+		if (InMouseEvent.IsShiftDown())
+		{
+			// Hier Logik für QuickMove (z.B. in Truhe verschieben) einbauen
+			return FReply::Handled();
+		}
+
+		// Normaler Klick -> An Haupt-Widget delegieren für Held Item Logic
+		if (UDualNodeInventoryWidget* ParentWidget = Cast<UDualNodeInventoryWidget>(GetTypedOuter<UDualNodeInventoryWidget>()))
+		{
+			ParentWidget->HandleSlotClick(SlotViewModel);
+			return FReply::Handled();
+		}
 	}
+
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
 
