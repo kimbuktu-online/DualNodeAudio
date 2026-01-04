@@ -1,13 +1,56 @@
 ﻿#include "DualNodeInventorySlotWidget.h"
+#include "DualNodeInventoryComponent.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
+#include "Blueprint/DragDropOperation.h"
 
 void UDualNodeInventorySlotWidget::NativeOnListItemObjectSet(UObject* ListItemObject)
 {
-	// FIX: Funktionsname angepasst auf Native-Variante
 	if (UDualNodeInventorySlotViewModel* NewVM = Cast<UDualNodeInventorySlotViewModel>(ListItemObject))
 	{
 		SlotViewModel = NewVM;
-		
-		// Triggert das BP-Event für visuelle Updates
 		OnSlotUpdated();
 	}
+}
+
+FReply UDualNodeInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
+	{
+		OnRightClicked();
+		return FReply::Handled();
+	}
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		return UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this, EKeys::LeftMouseButton).NativeReply;
+	}
+	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+void UDualNodeInventorySlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation)
+{
+	if (SlotViewModel && SlotViewModel->ItemIcon != nullptr)
+	{
+		UDragDropOperation* DragOp = NewObject<UDragDropOperation>();
+		DragOp->Payload = SlotViewModel;
+		DragOp->DefaultDragVisual = this;
+		OutOperation = DragOp;
+	}
+}
+
+bool UDualNodeInventorySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
+{
+	if (!InOperation || !SlotViewModel) return false;
+	if (UDualNodeInventorySlotViewModel* FromVM = Cast<UDualNodeInventorySlotViewModel>(InOperation->Payload))
+	{
+		if (FromVM == SlotViewModel) return true;
+		if (APawn* PlayerPawn = GetOwningPlayerPawn())
+		{
+			if (UDualNodeInventoryComponent* Inv = PlayerPawn->FindComponentByClass<UDualNodeInventoryComponent>())
+			{
+				Inv->Server_SwapSlots(FromVM->SlotIndex, SlotViewModel->SlotIndex);
+				return true;
+			}
+		}
+	}
+	return false;
 }

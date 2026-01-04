@@ -6,7 +6,6 @@ void UDualNodeInventoryViewModel::UpdateFromInventory(UDualNodeInventoryComponen
 {
 	if (!Inventory) return;
 
-	// Gewichtsberechnung (wie gehabt)
 	float CurrentWeight = Inventory->GetTotalWeight();
 	float MaxWeight = 100.0f; 
 	for (auto Validator : Inventory->Validators)
@@ -23,27 +22,15 @@ void UDualNodeInventoryViewModel::UpdateFromInventory(UDualNodeInventoryComponen
 	Args.Add(TEXT("Current"), FText::AsNumber(CurrentWeight));
 	SetDisplayWeight(FText::Format(NSLOCTEXT("InventoryUI", "WeightFormat", "{Current} kg"), Args));
 
-	// --- FIX FÜR FIXTE SLOT-ANZAHL ---
 	TArray<TObjectPtr<UDualNodeInventorySlotViewModel>> NewSlotModels;
-	const TArray<FDualNodeItemInstance>& CurrentItems = Inventory->GetItems();
+	const TArray<FDualNodeItemInstance>& Slots = Inventory->GetItems();
 
-	// 1. Vorhandene Items hinzufügen
-	for (const FDualNodeItemInstance& Item : CurrentItems)
+	for (int32 i = 0; i < Slots.Num(); i++)
 	{
 		UDualNodeInventorySlotViewModel* SlotVM = NewObject<UDualNodeInventorySlotViewModel>(this);
-		SlotVM->UpdateSlot(Item);
+		SlotVM->UpdateSlot(Slots[i], i);
 		NewSlotModels.Add(SlotVM);
 	}
-
-	// 2. Mit leeren Slots auffüllen bis MaxSlotCount erreicht ist
-	while (NewSlotModels.Num() < Inventory->MaxSlotCount)
-	{
-		UDualNodeInventorySlotViewModel* EmptySlotVM = NewObject<UDualNodeInventorySlotViewModel>(this);
-		FDualNodeItemInstance EmptyInstance; // Erstellt eine Instanz ohne Definition
-		EmptySlotVM->UpdateSlot(EmptyInstance);
-		NewSlotModels.Add(EmptySlotVM);
-	}
-
 	SetSlotViewModels(NewSlotModels);
 }
 

@@ -17,6 +17,7 @@ class DUALNODEINVENTORY_API UDualNodeInventoryComponent : public UActorComponent
 public:
 	UDualNodeInventoryComponent();
 
+	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UPROPERTY(BlueprintAssignable, Category="Inventory")
@@ -25,7 +26,6 @@ public:
 	UPROPERTY(EditAnywhere, Instanced, Category="Inventory|Config")
 	TArray<TObjectPtr<UDualNodeInventoryValidator>> Validators;
 
-	/** FIX: MaxSlotCount nach Public verschoben für UI-Zugriff */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory|Config")
 	int32 MaxSlotCount = 20;
 
@@ -38,9 +38,21 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Inventory")
 	bool RemoveItem(const UDualNodeItemDefinition* ItemDef, int32 Amount = 1);
 
+	// --- NEUE SLOT-LOGIK ---
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Inventory")
+	void Server_SwapSlots(int32 FromIndex, int32 ToIndex);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Inventory")
+	void Server_DropFromSlot(int32 SlotIndex, int32 Amount);
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Inventory")
+	void Server_UseItemInSlot(int32 SlotIndex);
+
 	UFUNCTION(BlueprintPure, Category="Inventory")
 	float GetTotalWeight() const;
 
+	/** Library Kompatibilität */
 	UFUNCTION(BlueprintPure, Category="Inventory")
 	int32 GetTotalAmountOfItem(const UDualNodeItemDefinition* ItemDef) const;
 
@@ -65,5 +77,5 @@ protected:
 
 private:
 	int32 FindStackableSlot(const UDualNodeItemDefinition* ItemDef) const;
-	int32 FindFreeSlot() const;
+	int32 FindFirstEmptySlot() const;
 };
