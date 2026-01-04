@@ -3,21 +3,21 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "DualNodeItemInstance.h"
+#include "DualNodeInteractionInterface.h" // Zwingend erforderlich
 #include "DualNodeWorldItem.generated.h"
 
 /**
  * Der Master Pickup Actor für die Spielwelt.
- * Erlaubt das Platzieren von Items im Level mit automatischer visueller Vorschau.
  */
 UCLASS()
-class DUALNODEINVENTORY_API ADualNodeWorldItem : public AActor
+class DUALNODEINVENTORY_API ADualNodeWorldItem : public AActor, public IDualNodeInteractionInterface // FIX: Vererbung hinzufügen
 {
 	GENERATED_BODY()
 
 public:
 	ADualNodeWorldItem();
 
-	/** Initialisiert den Actor zur Laufzeit (z.B. beim Droppen aus dem Inventar) */
+	/** Initialisiert den Actor zur Laufzeit */
 	UFUNCTION(BlueprintCallable, Category = "DualNode|Inventory")
 	void InitializeItem(const class UDualNodeItemDefinition* InDefinition, int32 InAmount = 1);
 
@@ -25,8 +25,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DualNode|Inventory")
 	bool PickUp(AActor* Interactor);
 
+	// --- IDualNodeInteractionInterface Implementation ---
+	virtual void Interact_Implementation(AActor* Interactor) override { PickUp(Interactor); }
+	virtual bool CanInteract_Implementation(AActor* Interactor) const override { return true; }
+	virtual FText GetInteractionText_Implementation() const override { return NSLOCTEXT("Interaction", "Pickup", "Aufnehmen"); }
+
 protected:
-	/** Wird aufgerufen, wenn Variablen im Editor geändert werden (Vorschau-Logik) */
 	virtual void OnConstruction(const FTransform& Transform) override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
@@ -35,17 +39,14 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	TObjectPtr<UStaticMeshComponent> MeshComponent;
 
-	/** Welches Item soll dieser Actor repräsentieren? (Einstellbar im Editor) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Config", Replicated)
 	FPrimaryAssetId ItemToGive;
 
-	/** Wie viele Einheiten sind im Stack? */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Config", Replicated, meta=(ClampMin="1"))
 	int32 Amount = 1;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 private:
-	/** Interne Hilfsfunktion zum Aktualisieren des Meshes basierend auf Item-Fragmenten */
 	void UpdateVisualsFromDefinition(const class UDualNodeItemDefinition* Definition);
 };
