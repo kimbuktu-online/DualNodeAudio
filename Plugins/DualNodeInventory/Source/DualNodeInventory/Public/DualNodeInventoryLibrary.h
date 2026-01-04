@@ -24,6 +24,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="DualNode|Inventory")
 	static bool TransferItem(UDualNodeInventoryComponent* Source, UDualNodeInventoryComponent* Destination, const UDualNodeItemDefinition* Item, int32 Amount);
 
+	/** Teilt einen Stack auf einen neuen Slot auf */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="DualNode|Inventory")
+	static bool SplitStack(UDualNodeInventoryComponent* Inventory, const UDualNodeItemDefinition* Item, int32 Amount);
+
 	/** Erzeugt einen World-Actor und entfernt das Item aus dem Inventar */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "DualNode|Inventory")
 	static bool DropItem(AActor* Dropper, const UDualNodeItemDefinition* Item, int32 Amount);

@@ -3,6 +3,7 @@
 #include "DualNodeInventoryInterface.h"
 #include "DualNodeItemFragment_Audio.h"
 #include "DualNodeItemFragment_UseAction.h"
+#include "DualNodeWorldItem.h" // Zwingend erforderlich für DropItem
 #include "Kismet/GameplayStatics.h"
 #include "Algo/Sort.h"
 
@@ -37,6 +38,26 @@ bool UDualNodeInventoryLibrary::SplitStack(UDualNodeInventoryComponent* Inventor
 	if (Inventory->RemoveItem(Item, Amount))
 	{
 		return Inventory->TryAddItem(Item, Amount);
+	}
+	return false;
+}
+
+bool UDualNodeInventoryLibrary::DropItem(AActor* Dropper, const UDualNodeItemDefinition* Item, int32 Amount)
+{
+	if (!Dropper || !Item || Amount <= 0 || !Dropper->HasAuthority()) return false;
+
+	UDualNodeInventoryComponent* Inv = GetInventoryComponent(Dropper);
+	if (Inv && Inv->RemoveItem(Item, Amount))
+	{
+		// Spawn-Position vor dem Dropper
+		FVector SpawnLoc = Dropper->GetActorLocation() + (Dropper->GetActorForwardVector() * 100.0f);
+		ADualNodeWorldItem* WorldItem = Dropper->GetWorld()->SpawnActor<ADualNodeWorldItem>(ADualNodeWorldItem::StaticClass(), SpawnLoc, FRotator::ZeroRotator);
+		
+		if (WorldItem)
+		{
+			WorldItem->InitializeItem(Item, Amount);
+			return true;
+		}
 	}
 	return false;
 }

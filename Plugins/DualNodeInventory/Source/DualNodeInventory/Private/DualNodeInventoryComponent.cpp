@@ -25,7 +25,7 @@ bool UDualNodeInventoryComponent::CanAddItem(const UDualNodeItemDefinition* Item
 	}
 
 	if (ItemDef->bCanStack && FindStackableSlot(ItemDef) != INDEX_NONE) return true;
-	if (FindFreeSlot() != INDEX_NONE) return true;
+	if (InventoryArray.Items.Num() < MaxSlotCount) return true;
 
 	OutFailureReason = NSLOCTEXT("Inventory", "Full", "Inventar voll.");
 	return false;
@@ -60,8 +60,12 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 	{
 		FDualNodeItemInstance& NewItem = InventoryArray.Items.AddDefaulted_GetRef();
 		NewItem.ItemId = Id;
-		NewItem.CachedDefinition = ItemDef;
+		
+		/** FIX: Cast, da CachedDefinition für Blueprint-Sichtbarkeit non-const sein muss */
+		NewItem.CachedDefinition = const_cast<UDualNodeItemDefinition*>(ItemDef);
+		
 		NewItem.StackCount = FMath::Min(Remaining, ItemDef->MaxStackSize);
+		NewItem.InstanceGuid = FGuid::NewGuid();
 		Remaining -= NewItem.StackCount;
 		InventoryArray.MarkArrayDirty();
 	}
@@ -146,6 +150,7 @@ void UDualNodeInventoryComponent::OnRep_Inventory()
 
 int32 UDualNodeInventoryComponent::FindStackableSlot(const UDualNodeItemDefinition* ItemDef) const
 {
+	if (!ItemDef) return INDEX_NONE;
 	FPrimaryAssetId Id = ItemDef->GetPrimaryAssetId();
 	for (int32 i = 0; i < InventoryArray.Items.Num(); ++i)
 		if (InventoryArray.Items[i].ItemId == Id && InventoryArray.Items[i].StackCount < ItemDef->MaxStackSize) return i;
