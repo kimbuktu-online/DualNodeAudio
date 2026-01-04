@@ -4,11 +4,11 @@
 #include "CommonUserWidget.h"
 #include "CommonTileView.h"
 #include "DualNodeInventoryViewModel.h"
+#include "FieldNotificationId.h"
 #include "DualNodeInventoryWidget.generated.h"
 
 /**
  * C++ Basis für das Haupt-Inventar-Menü.
- * Designer binden hier die TileView und das Haupt-ViewModel an.
  */
 UCLASS(Abstract, Blueprintable)
 class DUALNODEINVENTORY_API UDualNodeInventoryWidget : public UCommonUserWidget
@@ -16,26 +16,26 @@ class DUALNODEINVENTORY_API UDualNodeInventoryWidget : public UCommonUserWidget
 	GENERATED_BODY()
 
 public:
-	/** * Bindet ein Inventar an dieses UI.
-	 * Wird typischerweise vom PlayerController oder HUD aufgerufen.
-	 */
+	/** Bindet ein Inventar an dieses UI. */
 	UFUNCTION(BlueprintCallable, Category = "DualNode|Inventory")
 	void InitializeInventory(class UDualNodeInventoryComponent* InventoryComponent);
 
 protected:
-	/** * Referenz auf die TileView im Widget-Blueprint.
-	 * meta=(BindWidget) erzwingt, dass im Blueprint eine TileView mit diesem Namen existiert.
-	 */
+	/** Referenz auf die TileView im Widget-Blueprint. */
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget), Category = "DualNode|Inventory")
 	TObjectPtr<UCommonTileView> InventoryTileView;
 
-	/** Das ViewModel für das gesamte Inventar (Gewicht, Slot-Liste) */
+	/** Das ViewModel für das gesamte Inventar. */
 	UPROPERTY(BlueprintReadOnly, Category = "DualNode|Inventory")
 	TObjectPtr<UDualNodeInventoryViewModel> MainViewModel;
 
 private:
-	UFUNCTION() // Muss UFUNCTION sein, um von Delegates/UHT erkannt zu werden
+	/** Aktualisiert die TileView. */
+	UFUNCTION()
 	void HandleSlotViewModelsChanged();
+
+	/** Interner Callback für das MVVM-System. */
+	void HandleSlotViewModelsChanged_Internal(UObject* Source, UE::FieldNotification::FFieldId FieldId);
 
 	UPROPERTY()
 	TObjectPtr<class UDualNodeInventoryComponent> CachedComponent;

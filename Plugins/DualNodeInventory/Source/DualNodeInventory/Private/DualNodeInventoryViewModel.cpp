@@ -1,18 +1,14 @@
 ﻿#include "DualNodeInventoryViewModel.h"
 #include "DualNodeInventoryComponent.h"
+#include "DualNodeInventoryValidator.h"
 
 void UDualNodeInventoryViewModel::UpdateFromInventory(UDualNodeInventoryComponent* Inventory)
 {
 	if (!Inventory) return;
 
-	// Aktuelles Gewicht abrufen
+	// Gewichtsberechnung (wie gehabt)
 	float CurrentWeight = Inventory->GetTotalWeight();
-	
-	// Standardwert festlegen, falls kein Validator gefunden wird
 	float MaxWeight = 100.0f; 
-
-	// Dynamisch nach dem Weight-Validator suchen, um das echte Limit zu finden
-	// Wir greifen auf die Validators der InventoryComponent zu
 	for (auto Validator : Inventory->Validators)
 	{
 		if (UDualNodeValidator_Weight* WeightValidator = Cast<UDualNodeValidator_Weight>(Validator))
@@ -21,23 +17,33 @@ void UDualNodeInventoryViewModel::UpdateFromInventory(UDualNodeInventoryComponen
 			break;
 		}
 	}
-	
-	// Prozentwert korrekt berechnen (0.0 bis 1.0)
 	SetWeightPercent(FMath::Clamp(CurrentWeight / MaxWeight, 0.0f, 1.0f));
 	
-	// Textanzeige aktualisieren (z.B. "10 kg")
 	FFormatNamedArguments Args;
 	Args.Add(TEXT("Current"), FText::AsNumber(CurrentWeight));
 	SetDisplayWeight(FText::Format(NSLOCTEXT("InventoryUI", "WeightFormat", "{Current} kg"), Args));
 
-	// Slots wie gehabt aktualisieren
+	// --- FIX FÜR FIXTE SLOT-ANZAHL ---
 	TArray<TObjectPtr<UDualNodeInventorySlotViewModel>> NewSlotModels;
-	for (const FDualNodeItemInstance& Item : Inventory->GetItems())
+	const TArray<FDualNodeItemInstance>& CurrentItems = Inventory->GetItems();
+
+	// 1. Vorhandene Items hinzufügen
+	for (const FDualNodeItemInstance& Item : CurrentItems)
 	{
 		UDualNodeInventorySlotViewModel* SlotVM = NewObject<UDualNodeInventorySlotViewModel>(this);
 		SlotVM->UpdateSlot(Item);
 		NewSlotModels.Add(SlotVM);
 	}
+
+	// 2. Mit leeren Slots auffüllen bis MaxSlotCount erreicht ist
+	while (NewSlotModels.Num() < Inventory->MaxSlotCount)
+	{
+		UDualNodeInventorySlotViewModel* EmptySlotVM = NewObject<UDualNodeInventorySlotViewModel>(this);
+		FDualNodeItemInstance EmptyInstance; // Erstellt eine Instanz ohne Definition
+		EmptySlotVM->UpdateSlot(EmptyInstance);
+		NewSlotModels.Add(EmptySlotVM);
+	}
+
 	SetSlotViewModels(NewSlotModels);
 }
 

@@ -6,28 +6,44 @@ void UDualNodeInventoryWidget::InitializeInventory(UDualNodeInventoryComponent* 
 {
 	if (!InventoryComponent) return;
 
-	// ViewModel erstellen
+	CachedComponent = InventoryComponent;
+
+	// 1. ViewModel erstellen
 	MainViewModel = NewObject<UDualNodeInventoryViewModel>(this);
 	
-	// Initiale Daten laden
+	// 2. Initiale Daten laden
 	MainViewModel->UpdateFromInventory(InventoryComponent);
 
-	// Bindung an das Delegate der Komponente
+	// 3. Bindung: C++ Component -> ViewModel (Echtzeit-Datenaktualisierung)
 	InventoryComponent->OnInventoryUpdated.AddDynamic(MainViewModel.Get(), &UDualNodeInventoryViewModel::UpdateFromInventory);
 
-	// Den TileView initial füllen
+	// 4. FIX FÜR ECHTZEIT-UI-UPDATES (Klassen-Parameter hinzugefügt)
+	// Wir holen uns die Feld-ID für "SlotViewModels" unter Angabe der ViewModel-Klasse
+	UE::FieldNotification::FFieldId FieldId = MainViewModel->GetFieldNotificationDescriptor().GetField(UDualNodeInventoryViewModel::StaticClass(), FName("SlotViewModels"));
+
+	// Wir binden den internen Callback an dieses spezifische Feld
+	if (FieldId.IsValid())
+	{
+		MainViewModel->AddFieldValueChangedDelegate(FieldId, FFieldValueChangedDelegate::CreateUObject(this, &UDualNodeInventoryWidget::HandleSlotViewModelsChanged_Internal));
+	}
+
+	// 5. TileView initial füllen
 	if (InventoryTileView)
 	{
 		InventoryTileView->SetListItems(MainViewModel->SlotViewModels);
 	}
 }
 
-// --- HIER WAR DER FEHLER: IMPLEMENTIERUNG MUSS EXISTIEREN ---
+void UDualNodeInventoryWidget::HandleSlotViewModelsChanged_Internal(UObject* Source, UE::FieldNotification::FFieldId FieldId)
+{
+	HandleSlotViewModelsChanged();
+}
+
 void UDualNodeInventoryWidget::HandleSlotViewModelsChanged()
 {
 	if (InventoryTileView && MainViewModel)
 	{
-		// Aktualisiert die Anzeige der TileView basierend auf den neuen Daten im ViewModel
+		// Die TileView wird mit den neuen SlotViewModels synchronisiert und neu gezeichnet
 		InventoryTileView->SetListItems(MainViewModel->SlotViewModels);
 		InventoryTileView->RequestRefresh();
 	}

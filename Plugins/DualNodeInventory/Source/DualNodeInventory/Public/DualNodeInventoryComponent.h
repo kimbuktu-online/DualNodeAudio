@@ -19,12 +19,15 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	/** Delegate für UI-Aktualisierungen (Jetzt Public für Widget-Binding) */
 	UPROPERTY(BlueprintAssignable, Category="Inventory")
 	FOnInventoryUpdated OnInventoryUpdated;
 	
 	UPROPERTY(EditAnywhere, Instanced, Category="Inventory|Config")
 	TArray<TObjectPtr<UDualNodeInventoryValidator>> Validators;
+
+	/** FIX: MaxSlotCount nach Public verschoben für UI-Zugriff */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory|Config")
+	int32 MaxSlotCount = 20;
 
 	UFUNCTION(BlueprintPure, Category="Inventory")
 	bool CanAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount, FText& OutFailureReason) const;
@@ -59,9 +62,6 @@ public:
 protected:
 	UPROPERTY(ReplicatedUsing=OnRep_Inventory)
 	FDualNodeInventoryArray InventoryArray;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory|Config")
-	int32 MaxSlotCount = 20;
 
 private:
 	int32 FindStackableSlot(const UDualNodeItemDefinition* ItemDef) const;
