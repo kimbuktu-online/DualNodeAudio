@@ -17,7 +17,7 @@ struct FDualNodeItemInstance : public FFastArraySerializerItem
 	UPROPERTY(BlueprintReadOnly, Category = "Item")
 	int32 StackCount = 0;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Item")
+	UPROPERTY(BlueprintReadOnly, Category = "Item", meta = (IgnoreForMemberInitializationTest))
 	FGuid InstanceGuid;
 
 	UPROPERTY(BlueprintReadWrite, Category = "Item")

@@ -5,5 +5,6 @@ UDualNodeInventorySettings::UDualNodeInventorySettings()
 	CategoryName = TEXT("Plugins");
 	SectionName = TEXT("Dual Node Inventory");
     
-	DefaultPickupTag = FGameplayTag::RequestGameplayTag(TEXT("Event.Inventory.Pickup"));
+	// FIX: Das "false" verhindert den Absturz/Error, wenn der Tag (noch) fehlt
+	DefaultPickupTag = FGameplayTag::RequestGameplayTag(TEXT("Event.Inventory.Pickup"), false);
 }

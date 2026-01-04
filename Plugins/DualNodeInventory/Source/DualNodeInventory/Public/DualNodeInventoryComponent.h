@@ -22,6 +22,9 @@ public:
 	/** Delegate für UI-Aktualisierungen (Jetzt Public für Widget-Binding) */
 	UPROPERTY(BlueprintAssignable, Category="Inventory")
 	FOnInventoryUpdated OnInventoryUpdated;
+	
+	UPROPERTY(EditAnywhere, Instanced, Category="Inventory|Config")
+	TArray<TObjectPtr<UDualNodeInventoryValidator>> Validators;
 
 	UFUNCTION(BlueprintPure, Category="Inventory")
 	bool CanAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount, FText& OutFailureReason) const;
@@ -59,9 +62,6 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory|Config")
 	int32 MaxSlotCount = 20;
-
-	UPROPERTY(EditAnywhere, Instanced, Category="Inventory|Config")
-	TArray<TObjectPtr<UDualNodeInventoryValidator>> Validators;
 
 private:
 	int32 FindStackableSlot(const UDualNodeItemDefinition* ItemDef) const;

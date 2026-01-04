@@ -80,19 +80,30 @@ void ADualNodeWorldItem::UpdateVisualsFromDefinition(const UDualNodeItemDefiniti
 
 bool ADualNodeWorldItem::PickUp(AActor* Interactor)
 {
+	// 1. WICHTIG: Nur der Server darf Items einsammeln/löschen
 	if (!HasAuthority()) return false;
 
 	if (UDualNodeInventoryComponent* Inv = UDualNodeInventoryLibrary::GetInventoryComponent(Interactor))
 	{
-		// Asset auflösen
-		const UDualNodeItemDefinition* ItemDef = Cast<UDualNodeItemDefinition>(UAssetManager::Get().GetPrimaryAssetObject(ItemToGive));
+		UAssetManager& AssetManager = UAssetManager::Get();
+		
+		// 2. Asset finden oder zur Not synchron laden
+		UDualNodeItemDefinition* ItemDef = Cast<UDualNodeItemDefinition>(AssetManager.GetPrimaryAssetObject(ItemToGive));
+		if (!ItemDef)
+		{
+			ItemDef = Cast<UDualNodeItemDefinition>(AssetManager.GetPrimaryAssetPath(ItemToGive).TryLoad());
+		}
+
 		if (!ItemDef) return false;
 
+		// 3. Item dem Inventar hinzufügen
 		if (Inv->TryAddItem(ItemDef, Amount))
 		{
-			// Optional: Audio Pickup-Event triggern
-			UDualNodeInventoryLibrary::PlayItemSound(ItemDef, FGameplayTag::RequestGameplayTag(TEXT("Event.Inventory.Pickup")), Interactor);
+			// 4. Sound-Tag sicher anfordern (ohne Fehlermeldung)
+			FGameplayTag PickupTag = FGameplayTag::RequestGameplayTag(TEXT("Event.Inventory.Pickup"), false);
+			UDualNodeInventoryLibrary::PlayItemSound(ItemDef, PickupTag, Interactor);
 			
+			// 5. Item aus der Welt löschen
 			Destroy();
 			return true;
 		}
