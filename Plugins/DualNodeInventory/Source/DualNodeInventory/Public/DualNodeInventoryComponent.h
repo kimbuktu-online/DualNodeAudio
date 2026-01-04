@@ -47,8 +47,11 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Inventory|Persistence")
 	void LoadInventoryFromSnapshot(const FDualNodeInventorySaveData& Snapshot);
 
+	/** Zugriff auf die Instanz-Daten (Jetzt Blueprint-sichtbar!) */
+	UFUNCTION(BlueprintPure, Category = "Inventory")
 	const TArray<FDualNodeItemInstance>& GetItems() const { return InventoryArray.Items; }
 
+	/** Zwingt das System zur manuellen Aktualisierung auf Clients */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void OnRep_Inventory();
 

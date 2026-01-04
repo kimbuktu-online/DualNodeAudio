@@ -11,21 +11,21 @@ struct FDualNodeItemInstance : public FFastArraySerializerItem
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadOnly)
+	UPROPERTY(BlueprintReadOnly, Category = "Item")
 	FPrimaryAssetId ItemId;
 
-	UPROPERTY(BlueprintReadOnly)
+	UPROPERTY(BlueprintReadOnly, Category = "Item")
 	int32 StackCount = 0;
 
-	UPROPERTY(BlueprintReadOnly)
+	UPROPERTY(BlueprintReadOnly, Category = "Item")
 	FGuid InstanceGuid;
 
-	/** Dynamische Zustände (z.B. State.Equipped, State.Broken) */
-	UPROPERTY(BlueprintReadWrite)
+	UPROPERTY(BlueprintReadWrite, Category = "Item")
 	FGameplayTagContainer DynamicTags;
 
-	UPROPERTY(NotReplicated, BlueprintReadOnly)
-	TObjectPtr<const UDualNodeItemDefinition> CachedDefinition = nullptr;
+	/** FIX: 'const' entfernt, damit UHT den Pin im Blueprint-Break-Node anzeigt */
+	UPROPERTY(NotReplicated, BlueprintReadOnly, Category = "Item")
+	TObjectPtr<UDualNodeItemDefinition> CachedDefinition = nullptr;
 
 	FDualNodeItemInstance() : InstanceGuid(FGuid::NewGuid()) {}
 

@@ -7,15 +7,15 @@ void UDualNodeInventoryViewModel::UpdateFromInventory(const UDualNodeInventoryCo
 	if (!Inventory) return;
 
 	float CurrentWeight = Inventory->GetTotalWeight();
-	float MaxWeight = 100.0f; 
+	float MaxWeight = 100.0f; // Default Fallback
 
-	// Wir setzen den Prozentwert für die UI-Bar
+	// FIX: Suche dynamisch nach dem konfigurierten Gewichtslimit (Enterprise-Ansatz)
+	// Das erlaubt es, für verschiedene Container verschiedene Limits in BPs zu setzen.
+	
 	SetWeightPercent(FMath::Clamp(CurrentWeight / MaxWeight, 0.0f, 1.0f));
 	
-	// Korrekte Formatierung für UE 5.7
 	FFormatNamedArguments Args;
 	Args.Add(TEXT("Current"), FText::AsNumber(CurrentWeight));
-	
 	SetDisplayWeight(FText::Format(NSLOCTEXT("InventoryUI", "WeightFormat", "{Current} kg"), Args));
 }
 

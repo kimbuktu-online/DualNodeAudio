@@ -26,15 +26,48 @@ void ADualNodeWorldItem::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(ADualNodeWorldItem, Amount);
 }
 
+void ADualNodeWorldItem::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	// Editor-Vorschau: Lädt die Definition synchron, um das Mesh anzuzeigen
+	if (ItemToGive.IsValid())
+	{
+		UAssetManager& AssetManager = UAssetManager::Get();
+		
+		if (UDualNodeItemDefinition* Def = Cast<UDualNodeItemDefinition>(AssetManager.GetPrimaryAssetObject(ItemToGive)))
+		{
+			UpdateVisualsFromDefinition(Def);
+		}
+		else
+		{
+			// FIX: Nutze AssetManager, um den Pfad für FPrimaryAssetId zu erhalten
+			FSoftObjectPath AssetPath = AssetManager.GetPrimaryAssetPath(ItemToGive);
+			UDualNodeItemDefinition* LoadedDef = Cast<UDualNodeItemDefinition>(AssetPath.TryLoad());
+			
+			if (LoadedDef)
+			{
+				UpdateVisualsFromDefinition(LoadedDef);
+			}
+		}
+	}
+}
+
 void ADualNodeWorldItem::InitializeItem(const UDualNodeItemDefinition* InDefinition, int32 InAmount)
 {
 	if (!InDefinition) return;
 
 	ItemToGive = InDefinition->GetPrimaryAssetId();
 	Amount = InAmount;
+	
+	UpdateVisualsFromDefinition(InDefinition);
+}
 
-	// Visuelles Setup über das Mesh-Fragment
-	const UDualNodeItemFragment* Frag = InDefinition->FindFragmentByClass(UDualNodeItemFragment_Mesh::StaticClass());
+void ADualNodeWorldItem::UpdateVisualsFromDefinition(const UDualNodeItemDefinition* Definition)
+{
+	if (!Definition || !MeshComponent) return;
+
+	const UDualNodeItemFragment* Frag = Definition->FindFragmentByClass(UDualNodeItemFragment_Mesh::StaticClass());
 	if (const UDualNodeItemFragment_Mesh* MeshFrag = Cast<UDualNodeItemFragment_Mesh>(Frag))
 	{
 		if (MeshFrag->StaticMesh)
@@ -51,9 +84,15 @@ bool ADualNodeWorldItem::PickUp(AActor* Interactor)
 
 	if (UDualNodeInventoryComponent* Inv = UDualNodeInventoryLibrary::GetInventoryComponent(Interactor))
 	{
+		// Asset auflösen
 		const UDualNodeItemDefinition* ItemDef = Cast<UDualNodeItemDefinition>(UAssetManager::Get().GetPrimaryAssetObject(ItemToGive));
+		if (!ItemDef) return false;
+
 		if (Inv->TryAddItem(ItemDef, Amount))
 		{
+			// Optional: Audio Pickup-Event triggern
+			UDualNodeInventoryLibrary::PlayItemSound(ItemDef, FGameplayTag::RequestGameplayTag(TEXT("Event.Inventory.Pickup")), Interactor);
+			
 			Destroy();
 			return true;
 		}
