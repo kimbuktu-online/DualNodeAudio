@@ -70,3 +70,24 @@ bool UDualNodeInventorySlotWidget::NativeOnDrop(const FGeometry& InGeometry, con
 	}
 	return false;
 }
+
+void UDualNodeInventorySlotWidget::NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	Super::NativeOnMouseEnter(InGeometry, InMouseEvent);
+	if (SlotViewModel && SlotViewModel->StackCount > 0)
+	{
+		if (auto* Parent = Cast<UDualNodeInventoryWidget>(GetTypedOuter<UDualNodeInventoryWidget>()))
+		{
+			Parent->ShowTooltip(SlotViewModel, InGeometry);
+		}
+	}
+}
+
+void UDualNodeInventorySlotWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
+{
+	Super::NativeOnMouseLeave(InMouseEvent);
+	if (auto* Parent = Cast<UDualNodeInventoryWidget>(GetTypedOuter<UDualNodeInventoryWidget>()))
+	{
+		Parent->HideTooltip();
+	}
+}

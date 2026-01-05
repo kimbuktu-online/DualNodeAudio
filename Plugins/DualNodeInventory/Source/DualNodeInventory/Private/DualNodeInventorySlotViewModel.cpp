@@ -1,38 +1,56 @@
 ﻿#include "DualNodeInventorySlotViewModel.h"
 #include "DualNodeItemDefinition.h"
-#include "DualNodeInventoryTypes.h"
+#include "DualNodeInventoryComponent.h"
+#include "DualNodeItemFragment_Durability.h"
 #include "DualNodeItemFragment_UseAction.h"
 
-void UDualNodeInventorySlotViewModel::UpdateSlot(const FDualNodeItemInstance& ItemInstance, int32 InSlotIndex)
+void UDualNodeInventorySlotViewModel::UpdateSlot(const FDualNodeItemInstance& ItemInstance, int32 InSlotIndex, UDualNodeInventoryComponent* InInventory)
 {
 	ItemGuid = ItemInstance.InstanceGuid;
 	SlotIndex = InSlotIndex;
 
-	if (ItemInstance.CachedDefinition)
+	if (ItemInstance.CachedDefinition && InInventory)
 	{
-		SetItemName(ItemInstance.CachedDefinition->ItemName);
-		SetItemIcon(ItemInstance.CachedDefinition->ItemIcon);
-		
-		SetStackCount(ItemInstance.StackCount);
+		UE_MVVM_SET_PROPERTY_VALUE(ItemName, ItemInstance.CachedDefinition->ItemName);
+		UE_MVVM_SET_PROPERTY_VALUE(ItemDescription, ItemInstance.CachedDefinition->ItemDescription);
+		UE_MVVM_SET_PROPERTY_VALUE(ItemIcon, ItemInstance.CachedDefinition->ItemIcon);
+		UE_MVVM_SET_PROPERTY_VALUE(StackCount, ItemInstance.StackCount);
 
 		FText NewQuantity = (ItemInstance.StackCount > 1) 
 			? FText::Format(NSLOCTEXT("InventoryUI", "QuantityLabel", "x{0}"), FText::AsNumber(ItemInstance.StackCount)) 
 			: FText::GetEmpty();
-		SetQuantityText(NewQuantity);
+		UE_MVVM_SET_PROPERTY_VALUE(QuantityText, NewQuantity);
 
-		SetIsUsable(ItemInstance.CachedDefinition->FindFragmentByClass(UDualNodeItemFragment_UseAction::StaticClass()) != nullptr);
+		// V2.0: Haltbarkeit abfragen
+		float Pct = InInventory->GetItemDurabilityPercent(SlotIndex);
+		UE_MVVM_SET_PROPERTY_VALUE(DurabilityPercent, Pct);
 
-		if (ItemInstance.CachedDefinition->Rarity) SetRarityColor(ItemInstance.CachedDefinition->Rarity->RarityColor);
-		else SetRarityColor(FColor::White);
+		const UDualNodeItemFragment* DurFrag = ItemInstance.CachedDefinition->FindFragmentByClass(UDualNodeItemFragment_Durability::StaticClass());
+		UE_MVVM_SET_PROPERTY_VALUE(bShowDurability, DurFrag != nullptr);
+
+		if (const UDualNodeItemFragment_Durability* CastDur = Cast<UDualNodeItemFragment_Durability>(DurFrag))
+		{
+			if (CastDur->DurabilityType == EDualNodeDurabilityType::TimeBased)
+			{
+				// In einem echten HUD-Tick würde das hier öfter aktualisiert werden.
+				// Hier setzen wir den Initialwert.
+				int32 RemainingSeconds = FMath::Max(0, FMath::RoundToInt((ItemInstance.ExpirationTimestamp - InInventory->GetWorld()->GetTimeSeconds())));
+				FText TimeText = FText::Format(NSLOCTEXT("InventoryUI", "ExpiresIn", "{0}s"), FText::AsNumber(RemainingSeconds));
+				UE_MVVM_SET_PROPERTY_VALUE(DurabilityCountdownText, TimeText);
+			}
+		}
+
+		UE_MVVM_SET_PROPERTY_VALUE(bIsUsable, ItemInstance.CachedDefinition->FindFragmentByClass(UDualNodeItemFragment_UseAction::StaticClass()) != nullptr);
+		
+		if (ItemInstance.CachedDefinition->Rarity) UE_MVVM_SET_PROPERTY_VALUE(RarityColor, ItemInstance.CachedDefinition->Rarity->RarityColor);
+		else UE_MVVM_SET_PROPERTY_VALUE(RarityColor, FColor::White);
 	}
 	else
 	{
-		SetItemName(FText::GetEmpty());
-		SetItemIcon(nullptr);
-		SetQuantityText(FText::GetEmpty());
-		SetStackCount(0);
-		SetRarityColor(FColor(0, 0, 0, 0));
-		SetIsUsable(false);
+		// Reset-Logik für leere Slots
+		UE_MVVM_SET_PROPERTY_VALUE(StackCount, 0);
+		UE_MVVM_SET_PROPERTY_VALUE(bShowDurability, false);
+		UE_MVVM_SET_PROPERTY_VALUE(RarityColor, FColor(0,0,0,0));
 	}
 }
 

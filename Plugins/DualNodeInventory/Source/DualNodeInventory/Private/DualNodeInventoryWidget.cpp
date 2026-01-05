@@ -113,3 +113,29 @@ void UDualNodeInventoryWidget::HandleSlotViewModelsChanged()
 		InventoryTileView->RequestRefresh();
 	}
 }
+
+void UDualNodeInventoryWidget::ShowTooltip(UDualNodeInventorySlotViewModel* SlotVM, const FGeometry& SlotGeometry)
+{
+	if (!TooltipClass || !SlotVM) return;
+
+	if (!ActiveTooltip)
+	{
+		ActiveTooltip = CreateWidget<UDualNodeItemTooltipWidget>(this, TooltipClass);
+		ActiveTooltip->AddToViewport(1100); // Über dem Inventar
+	}
+
+	ActiveTooltip->SetTooltipData(SlotVM);
+	ActiveTooltip->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+	// Positionierung: Rechts neben dem Slot
+	FVector2D TooltipPos = SlotGeometry.GetAbsolutePosition() + FVector2D(SlotGeometry.GetAbsoluteSize().X + 10.0f, 0.0f);
+	ActiveTooltip->SetPositionInViewport(TooltipPos, true);
+}
+
+void UDualNodeInventoryWidget::HideTooltip()
+{
+	if (ActiveTooltip)
+	{
+		ActiveTooltip->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}

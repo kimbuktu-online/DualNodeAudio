@@ -11,13 +11,17 @@ class DUALNODEINVENTORY_API UDualNodeInventorySlotViewModel : public UMVVMViewMo
 	GENERATED_BODY()
 
 public:
-	void UpdateSlot(const FDualNodeItemInstance& ItemInstance, int32 InSlotIndex);
+	/** V2.0: Benötigt nun die Komponente für die Haltbarkeits-Berechnung */
+	void UpdateSlot(const FDualNodeItemInstance& ItemInstance, int32 InSlotIndex, class UDualNodeInventoryComponent* InInventory);
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Display")
 	TObjectPtr<UTexture2D> ItemIcon;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Display")
 	FText ItemName;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Display")
+	FText ItemDescription;
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Display")
 	FText QuantityText;
@@ -28,10 +32,20 @@ public:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Display")
 	FColor RarityColor;
 
+	// --- V2.0 DURABILITY DATA ---
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Display")
+	float DurabilityPercent = 1.0f;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Display")
+	FText DurabilityCountdownText;
+
+	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Logic")
+	bool bShowDurability = false;
+
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Logic")
 	bool bIsUsable = false;
 
-	/** NEU: Markiert diesen Slot als Quelle eines laufenden Transfers (für visuelles Feedback) */
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Logic")
 	bool bIsSourceOfTransfer = false;
 
@@ -42,6 +56,9 @@ public:
 	FGuid ItemGuid;
 
 protected:
+	void SetDurabilityPercent(float NewValue);
+	void SetDurabilityCountdownText(FText NewValue);
+	void SetShowDurability(bool bNewValue);
 	void SetItemIcon(TObjectPtr<UTexture2D> NewValue);
 	void SetItemName(FText NewValue);
 	void SetQuantityText(FText NewValue);

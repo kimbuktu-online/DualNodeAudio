@@ -20,11 +20,20 @@ public:
 	void OpenContextMenu(UDualNodeInventorySlotViewModel* SlotVM, FVector2D ScreenPosition);
 
 	void HandleSlotClick(UDualNodeInventorySlotViewModel* ClickedSlot);
+	
+	void ShowTooltip(class UDualNodeInventorySlotViewModel* SlotVM, const FGeometry& SlotGeometry);
+	void HideTooltip();
 
 protected:
 	virtual FReply NativeOnMouseWheel(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
+	UPROPERTY(EditAnywhere, Category = "DualNode|Inventory|Config")
+	TSubclassOf<class UDualNodeItemTooltipWidget> TooltipClass;
+
+	UPROPERTY()
+	TObjectPtr<UDualNodeItemTooltipWidget> ActiveTooltip;
+	
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget), Category = "DualNode|Inventory")
 	TObjectPtr<UCommonTileView> InventoryTileView;
 
