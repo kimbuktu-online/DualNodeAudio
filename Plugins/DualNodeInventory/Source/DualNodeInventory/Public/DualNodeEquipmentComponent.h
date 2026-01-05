@@ -22,13 +22,13 @@ public:
 	void UnequipSlot(FGameplayTag SlotTag);
 
 protected:
-	/** Speichert die aktuell gespawnten Meshes pro Slot-Tag */
-	UPROPERTY()
-	TMap<FGameplayTag, TObjectPtr<AActor>> EquippedActors;
-
 	/** Speichert gespawnte Skeletal Components (für Leader-Pose) */
 	UPROPERTY()
 	TMap<FGameplayTag, TObjectPtr<USkeletalMeshComponent>> EquippedSkeletalMeshes;
+
+	/** Speichert gespawnte Static Components (für Waffen etc.) */
+	UPROPERTY()
+	TMap<FGameplayTag, TObjectPtr<UStaticMeshComponent>> EquippedStaticMeshes;
 
 private:
 	USkeletalMeshComponent* GetParentMesh() const;

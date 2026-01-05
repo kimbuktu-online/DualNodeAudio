@@ -47,14 +47,14 @@ void UDualNodeEquipmentComponent::EquipItem(const UDualNodeItemDefinition* ItemD
 		NewWeapon->SetupAttachment(ParentMesh, EquipFrag->AttachmentSocket);
 		NewWeapon->RegisterComponent();
 		
-		// Wir speichern Waffen-Meshes in der EquippedActors Map (via Actor-Pointer oder Component-Casting)
-		// Hier als einfache Component-Lösung:
+		// Korrektur: Die neue Komponente in der korrekten Map speichern
+		EquippedStaticMeshes.Add(EquipFrag->SlotTag, NewWeapon);
 	}
 }
 
 void UDualNodeEquipmentComponent::UnequipSlot(FGameplayTag SlotTag)
 {
-	// FIX C2440: Korrekte Handhabung von TObjectPtr in TMap::Find
+	// Skeletal Meshes entfernen
 	if (TObjectPtr<USkeletalMeshComponent>* FoundCompPtr = EquippedSkeletalMeshes.Find(SlotTag))
 	{
 		if (USkeletalMeshComponent* Comp = FoundCompPtr->Get())
@@ -62,6 +62,16 @@ void UDualNodeEquipmentComponent::UnequipSlot(FGameplayTag SlotTag)
 			Comp->DestroyComponent();
 		}
 		EquippedSkeletalMeshes.Remove(SlotTag);
+	}
+
+	// Korrektur: Static Meshes entfernen
+	if (TObjectPtr<UStaticMeshComponent>* FoundStaticCompPtr = EquippedStaticMeshes.Find(SlotTag))
+	{
+		if (UStaticMeshComponent* Comp = FoundStaticCompPtr->Get())
+		{
+			Comp->DestroyComponent();
+		}
+		EquippedStaticMeshes.Remove(SlotTag);
 	}
 }
 

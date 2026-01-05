@@ -29,7 +29,7 @@ FReply UDualNodeInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& In
 		}
 	}
 
-	// LINKSKLICK -> Drag/Drop oder Transfer
+	// LINKSKLICK -> "Held Item" Logik
 	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
 		if (UDualNodeInventoryWidget* ParentWidget = Cast<UDualNodeInventoryWidget>(GetTypedOuter<UDualNodeInventoryWidget>()))
@@ -44,6 +44,8 @@ FReply UDualNodeInventorySlotWidget::NativeOnMouseButtonDown(const FGeometry& In
 
 void UDualNodeInventorySlotWidget::NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation)
 {
+	// Deaktiviert, um das konsistente "Held Item"-System zu bevorzugen.
+	/*
 	if (SlotViewModel && SlotViewModel->ItemIcon != nullptr)
 	{
 		UDragDropOperation* DragOp = NewObject<UDragDropOperation>();
@@ -51,10 +53,13 @@ void UDualNodeInventorySlotWidget::NativeOnDragDetected(const FGeometry& InGeome
 		DragOp->DefaultDragVisual = this;
 		OutOperation = DragOp;
 	}
+	*/
 }
 
 bool UDualNodeInventorySlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation)
 {
+	// Deaktiviert, um das konsistente "Held Item"-System zu bevorzugen.
+	/*
 	if (!InOperation || !SlotViewModel) return false;
 	if (UDualNodeInventorySlotViewModel* FromVM = Cast<UDualNodeInventorySlotViewModel>(InOperation->Payload))
 	{
@@ -68,6 +73,7 @@ bool UDualNodeInventorySlotWidget::NativeOnDrop(const FGeometry& InGeometry, con
 			}
 		}
 	}
+	*/
 	return false;
 }
 
