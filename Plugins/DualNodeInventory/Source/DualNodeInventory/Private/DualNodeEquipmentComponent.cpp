@@ -3,6 +3,7 @@
 #include "DualNodeItemFragment_Equipment.h"
 #include "GameFramework/Character.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
 
 UDualNodeEquipmentComponent::UDualNodeEquipmentComponent()
 {
@@ -31,7 +32,7 @@ void UDualNodeEquipmentComponent::EquipItem(const UDualNodeItemDefinition* ItemD
 		NewComp->SetSkeletalMesh(EquipFrag->EquipmentMesh);
 		NewComp->SetupAttachment(ParentMesh);
 		
-		// WICHTIG: Synchronisation mit dem Haupt-Mesh
+		// Synchronisation mit dem Haupt-Mesh (Wichtig für Animationen)
 		NewComp->SetLeaderPoseComponent(ParentMesh);
 		
 		NewComp->RegisterComponent();
@@ -41,21 +42,25 @@ void UDualNodeEquipmentComponent::EquipItem(const UDualNodeItemDefinition* ItemD
 	// 3. FALL B: Statisches Mesh (Waffen/Werkzeuge am Socket)
 	else if (EquipFrag->StaticMesh)
 	{
-		// Hier könnten wir einen Actor spawnen oder eine StaticMeshComponent nutzen
-		UStaticMeshComponent* WeaponComp = NewObject<UStaticMeshComponent>(GetOwner());
-		WeaponComp->SetStaticMesh(EquipFrag->StaticMesh);
-		WeaponComp->SetupAttachment(ParentMesh, EquipFrag->AttachmentSocket);
-		WeaponComp->RegisterComponent();
+		UStaticMeshComponent* NewWeapon = NewObject<UStaticMeshComponent>(GetOwner());
+		NewWeapon->SetStaticMesh(EquipFrag->StaticMesh);
+		NewWeapon->SetupAttachment(ParentMesh, EquipFrag->AttachmentSocket);
+		NewWeapon->RegisterComponent();
 		
-		// In einem echten System würden wir dies in der TMap tracken
+		// Wir speichern Waffen-Meshes in der EquippedActors Map (via Actor-Pointer oder Component-Casting)
+		// Hier als einfache Component-Lösung:
 	}
 }
 
 void UDualNodeEquipmentComponent::UnequipSlot(FGameplayTag SlotTag)
 {
-	if (USkeletalMeshComponent** FoundComp = EquippedSkeletalMeshes.Find(SlotTag))
+	// FIX C2440: Korrekte Handhabung von TObjectPtr in TMap::Find
+	if (TObjectPtr<USkeletalMeshComponent>* FoundCompPtr = EquippedSkeletalMeshes.Find(SlotTag))
 	{
-		(*FoundComp)->DestroyComponent();
+		if (USkeletalMeshComponent* Comp = FoundCompPtr->Get())
+		{
+			Comp->DestroyComponent();
+		}
 		EquippedSkeletalMeshes.Remove(SlotTag);
 	}
 }

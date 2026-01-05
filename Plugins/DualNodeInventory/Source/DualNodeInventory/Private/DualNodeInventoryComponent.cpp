@@ -2,6 +2,9 @@
 #include "Net/UnrealNetwork.h"
 #include "DualNodeItemDefinition.h"
 #include "DualNodeInventoryLibrary.h"
+#include "DualNodeItemFragment_Durability.h"
+#include "GameFramework/GameStateBase.h"
+#include "Engine/World.h"
 
 UDualNodeInventoryComponent::UDualNodeInventoryComponent()
 {
@@ -12,7 +15,7 @@ UDualNodeInventoryComponent::UDualNodeInventoryComponent()
 void UDualNodeInventoryComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	if (GetOwner()->HasAuthority() && InventoryArray.Items.Num() == 0)
+	if (GetOwner() && GetOwner()->HasAuthority() && InventoryArray.Items.Num() == 0)
 	{
 		for (int32 i = 0; i < MaxSlotCount; i++)
 		{
@@ -41,7 +44,8 @@ bool UDualNodeInventoryComponent::CanAddItem(const UDualNodeItemDefinition* Item
 
 bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount)
 {
-	if (!GetOwner()->HasAuthority() || !ItemDef) return false;
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !ItemDef) return false;
+	
 	FText Dummy;
 	if (!CanAddItem(ItemDef, Amount, Dummy)) return false;
 
@@ -58,7 +62,7 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 			{
 				int32 ToAdd = FMath::Min(Remaining, ItemDef->MaxStackSize - Slot.StackCount);
 				
-				// V2.0: Green Hell Merge Modell für Zeitstempel
+				// Green Hell Merge Modell
 				const UDualNodeItemFragment* Frag = ItemDef->FindFragmentByClass(UDualNodeItemFragment_Durability::StaticClass());
 				if (const UDualNodeItemFragment_Durability* DurFrag = Cast<UDualNodeItemFragment_Durability>(Frag))
 				{
@@ -67,9 +71,7 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 						double CurrentTime = GetWorld()->GetTimeSeconds();
 						if (AGameStateBase* GS = GetWorld()->GetGameState()) CurrentTime = GS->GetServerWorldTimeSeconds();
 
-						double NewItemExpire = CurrentTime + DurFrag->DegradationRate;
-						
-						// Gewichteter Durchschnitt: (Alte Menge * Alter Zeitstempel + Neue Menge * Neuer Zeitstempel) / Gesamt
+						double NewItemExpire = CurrentTime + (double)DurFrag->DegradationRate;
 						double OldTotal = (double)Slot.StackCount * Slot.ExpirationTimestamp;
 						double NewTotal = (double)ToAdd * NewItemExpire;
 						Slot.ExpirationTimestamp = (OldTotal + NewTotal) / (double)(Slot.StackCount + ToAdd);
@@ -85,7 +87,7 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 		}
 	}
 
-	// 2. NEUE SLOTS BELEGEN (Priorisiert HUD-Slots 0-4)
+	// 2. NEUE SLOTS (HUD-Priority)
 	while (Remaining > 0)
 	{
 		int32 EmptyIdx = FindFirstEmptySlot();
@@ -97,7 +99,6 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 		Slot.StackCount = FMath::Min(Remaining, ItemDef->MaxStackSize);
 		Slot.InstanceGuid = FGuid::NewGuid();
 		
-		// V2.0 Initialisierung der Haltbarkeit
 		InitializeDurability(Slot, ItemDef);
 
 		Remaining -= Slot.StackCount;
@@ -114,13 +115,10 @@ void UDualNodeInventoryComponent::InitializeDurability(FDualNodeItemInstance& In
 	if (const UDualNodeItemFragment_Durability* DurFrag = Cast<UDualNodeItemFragment_Durability>(Frag))
 	{
 		Instance.CurrentDurability = DurFrag->MaxDurability;
-
 		if (DurFrag->DurabilityType == EDualNodeDurabilityType::TimeBased)
 		{
 			double CurrentTime = GetWorld()->GetTimeSeconds();
 			if (AGameStateBase* GS = GetWorld()->GetGameState()) CurrentTime = GS->GetServerWorldTimeSeconds();
-			
-			// DegradationRate dient hier als Lebensdauer in Sekunden
 			Instance.ExpirationTimestamp = CurrentTime + (double)DurFrag->DegradationRate;
 		}
 	}
@@ -130,7 +128,7 @@ float UDualNodeInventoryComponent::GetItemDurabilityPercent(int32 SlotIndex) con
 {
 	if (!InventoryArray.Items.IsValidIndex(SlotIndex)) return 0.0f;
 	const FDualNodeItemInstance& Slot = InventoryArray.Items[SlotIndex];
-	if (!Slot.CachedDefinition) return 0.0f;
+	if (!Slot.CachedDefinition) return 1.0f;
 
 	const UDualNodeItemFragment* Frag = Slot.CachedDefinition->FindFragmentByClass(UDualNodeItemFragment_Durability::StaticClass());
 	if (const UDualNodeItemFragment_Durability* DurFrag = Cast<UDualNodeItemFragment_Durability>(Frag))
@@ -144,8 +142,9 @@ float UDualNodeInventoryComponent::GetItemDurabilityPercent(int32 SlotIndex) con
 			double CurrentTime = GetWorld()->GetTimeSeconds();
 			if (AGameStateBase* GS = GetWorld()->GetGameState()) CurrentTime = GS->GetServerWorldTimeSeconds();
 
+			double TotalLifetime = (double)DurFrag->DegradationRate;
 			double Remaining = Slot.ExpirationTimestamp - CurrentTime;
-			return FMath::Clamp((float)(Remaining / (double)DurFrag->DegradationRate), 0.0f, 1.0f);
+			return FMath::Clamp((float)(Remaining / TotalLifetime), 0.0f, 1.0f);
 		}
 	}
 	return 1.0f;
@@ -153,16 +152,12 @@ float UDualNodeInventoryComponent::GetItemDurabilityPercent(int32 SlotIndex) con
 
 int32 UDualNodeInventoryComponent::FindFirstEmptySlot() const
 {
-	// V2.0: Zuerst HUD-Bereich prüfen (0 bis HUDSlotCount-1)
 	for (int32 i = 0; i < FMath::Min(HUDSlotCount, InventoryArray.Items.Num()); i++)
-	{
 		if (!InventoryArray.Items[i].ItemId.IsValid()) return i;
-	}
-	// Dann Rest des Inventars
+	
 	for (int32 i = HUDSlotCount; i < InventoryArray.Items.Num(); i++)
-	{
 		if (!InventoryArray.Items[i].ItemId.IsValid()) return i;
-	}
+
 	return INDEX_NONE;
 }
 
@@ -171,23 +166,21 @@ int32 UDualNodeInventoryComponent::FindStackableSlot(const UDualNodeItemDefiniti
 	if (!ItemDef) return INDEX_NONE;
 	FPrimaryAssetId Id = ItemDef->GetPrimaryAssetId();
 
-	// Priorität auf HUD-Slots für Stacking
 	for (int32 i = 0; i < FMath::Min(HUDSlotCount, InventoryArray.Items.Num()); i++)
-	{
 		if (InventoryArray.Items[i].ItemId == Id && InventoryArray.Items[i].StackCount < ItemDef->MaxStackSize) return i;
-	}
+
 	for (int32 i = HUDSlotCount; i < InventoryArray.Items.Num(); i++)
-	{
 		if (InventoryArray.Items[i].ItemId == Id && InventoryArray.Items[i].StackCount < ItemDef->MaxStackSize) return i;
-	}
+
 	return INDEX_NONE;
 }
 
 bool UDualNodeInventoryComponent::RemoveItem(const UDualNodeItemDefinition* ItemDef, int32 Amount)
 {
-	if (!GetOwner()->HasAuthority() || !ItemDef) return false;
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !ItemDef) return false;
 	FPrimaryAssetId Id = ItemDef->GetPrimaryAssetId();
 	int32 Remaining = Amount;
+
 	for (int32 i = InventoryArray.Items.Num() - 1; i >= 0; --i)
 	{
 		if (InventoryArray.Items[i].ItemId == Id)
@@ -217,25 +210,16 @@ void UDualNodeInventoryComponent::Server_SwapSlots_Implementation(int32 From, in
 void UDualNodeInventoryComponent::Server_DropFromSlot_Implementation(int32 SlotIndex, int32 Amount)
 {
 	if (!InventoryArray.Items.IsValidIndex(SlotIndex)) return;
-	
 	FDualNodeItemInstance& Slot = InventoryArray.Items[SlotIndex];
-	if (!Slot.CachedDefinition || Amount <= 0 || Slot.StackCount <= 0) return;
+	if (!Slot.CachedDefinition || Amount <= 0) return;
 
 	int32 DropAmount = FMath::Min(Amount, Slot.StackCount);
-	
-	// FIX: Wir nutzen SpawnItemInWorld (nur Spawn!), anstatt DropItem (Spawn + globaler Abzug)
 	FVector SpawnLoc = GetOwner()->GetActorLocation() + (GetOwner()->GetActorForwardVector() * 100.0f);
 	
 	if (UDualNodeInventoryLibrary::SpawnItemInWorld(GetOwner(), Slot.CachedDefinition, DropAmount, SpawnLoc))
 	{
-		// Jetzt ziehen wir NUR von diesem spezifischen Slot ab
 		Slot.StackCount -= DropAmount;
-		
-		if (Slot.StackCount <= 0) 
-		{
-			Slot = FDualNodeItemInstance();
-		}
-
+		if (Slot.StackCount <= 0) Slot = FDualNodeItemInstance();
 		InventoryArray.MarkItemDirty(Slot);
 		OnRep_Inventory();
 	}
@@ -244,16 +228,10 @@ void UDualNodeInventoryComponent::Server_DropFromSlot_Implementation(int32 SlotI
 void UDualNodeInventoryComponent::Server_UseItemInSlot_Implementation(int32 SlotIndex)
 {
 	if (!InventoryArray.Items.IsValidIndex(SlotIndex)) return;
-	
 	FDualNodeItemInstance& Slot = InventoryArray.Items[SlotIndex];
 	if (Slot.CachedDefinition)
 	{
-		// Wir geben den SlotIndex mit, damit das System weiß, woher es kommt
 		UDualNodeInventoryLibrary::UseItem(GetOwner(), Slot.CachedDefinition, SlotIndex);
-		
-		// Falls das Item verbraucht wurde (durch UseItem -> RemoveItem), 
-		// müssen wir sicherstellen, dass wir synchron sind. 
-		// OnRep_Inventory() sorgt für den Refresh der ViewModels.
 		OnRep_Inventory();
 	}
 }
@@ -261,23 +239,19 @@ void UDualNodeInventoryComponent::Server_UseItemInSlot_Implementation(int32 Slot
 void UDualNodeInventoryComponent::Server_TransferQuantity_Implementation(int32 FromIndex, int32 ToIndex, int32 Quantity, UDualNodeInventoryComponent* TargetInventory)
 {
 	if (!InventoryArray.Items.IsValidIndex(FromIndex)) return;
-	
 	UDualNodeInventoryComponent* DestInv = TargetInventory ? TargetInventory : this;
 	if (!DestInv->InventoryArray.Items.IsValidIndex(ToIndex)) return;
 
 	FDualNodeItemInstance& SourceSlot = InventoryArray.Items[FromIndex];
 	FDualNodeItemInstance& DestSlot = DestInv->InventoryArray.Items[ToIndex];
-
 	if (!SourceSlot.CachedDefinition) return;
 
 	int32 MoveAmount = FMath::Min(Quantity, SourceSlot.StackCount);
 
-	// Logik: Entweder in leeren Slot schieben oder auf gleichen Typ stacken
 	if (!DestSlot.ItemId.IsValid() || (DestSlot.ItemId == SourceSlot.ItemId && DestSlot.StackCount < SourceSlot.CachedDefinition->MaxStackSize))
 	{
 		int32 CanFit = DestSlot.ItemId.IsValid() ? SourceSlot.CachedDefinition->MaxStackSize - DestSlot.StackCount : MoveAmount;
 		int32 ActualMove = FMath::Min(MoveAmount, CanFit);
-
 		if (ActualMove <= 0) return;
 
 		DestSlot.ItemId = SourceSlot.ItemId;
@@ -320,6 +294,7 @@ FDualNodeInventorySaveData UDualNodeInventoryComponent::GetInventorySnapshot() c
 	FDualNodeInventorySaveData Snapshot;
 	for (const auto& Item : InventoryArray.Items)
 	{
+		if (!Item.ItemId.IsValid()) continue;
 		FDualNodeItemSaveData Data;
 		Data.ItemId = Item.ItemId; Data.StackCount = Item.StackCount; Data.InstanceGuid = Item.InstanceGuid;
 		Snapshot.SavedItems.Add(Data);
@@ -329,7 +304,7 @@ FDualNodeInventorySaveData UDualNodeInventoryComponent::GetInventorySnapshot() c
 
 void UDualNodeInventoryComponent::LoadInventoryFromSnapshot(const FDualNodeInventorySaveData& Snapshot)
 {
-	if (!GetOwner()->HasAuthority()) return;
+	if (!GetOwner() || !GetOwner()->HasAuthority()) return;
 	InventoryArray.Items.Empty();
 	for (const auto& S : Snapshot.SavedItems)
 	{
