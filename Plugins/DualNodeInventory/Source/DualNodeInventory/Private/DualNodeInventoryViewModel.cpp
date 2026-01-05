@@ -1,6 +1,7 @@
 ﻿#include "DualNodeInventoryViewModel.h"
 #include "DualNodeInventoryComponent.h"
 #include "DualNodeInventoryValidator.h"
+#include "DualNodeInventorySlotViewModel.h"
 
 void UDualNodeInventoryViewModel::UpdateFromInventory(UDualNodeInventoryComponent* Inventory)
 {
@@ -28,7 +29,8 @@ void UDualNodeInventoryViewModel::UpdateFromInventory(UDualNodeInventoryComponen
 	for (int32 i = 0; i < Slots.Num(); i++)
 	{
 		UDualNodeInventorySlotViewModel* SlotVM = NewObject<UDualNodeInventorySlotViewModel>(this);
-		SlotVM->UpdateSlot(Slots[i], i);
+		// FIX C2660: Übergabe von 'Inventory' für Haltbarkeits-Checks
+		SlotVM->UpdateSlot(Slots[i], i, Inventory);
 		NewSlotModels.Add(SlotVM);
 	}
 	SetSlotViewModels(NewSlotModels);

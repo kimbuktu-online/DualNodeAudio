@@ -4,6 +4,9 @@
 #include "CommonUserWidget.h"
 #include "DualNodeItemTooltipWidget.generated.h"
 
+/**
+ * Basisklasse für das Hover-Popover (Version 2.0).
+ */
 UCLASS(Abstract, Blueprintable)
 class DUALNODEINVENTORY_API UDualNodeItemTooltipWidget : public UCommonUserWidget
 {
@@ -11,14 +14,14 @@ class DUALNODEINVENTORY_API UDualNodeItemTooltipWidget : public UCommonUserWidge
 
 public:
 	/** Bindet ein Slot-ViewModel an den Tooltip */
-	UFUNCTION(BlueprintCallable, Category = "Inventory|UI")
+	UFUNCTION(BlueprintCallable, Category = "DualNode|Inventory|UI")
 	void SetTooltipData(class UDualNodeInventorySlotViewModel* InSlotVM);
 
 protected:
-	UPROPERTY(BlueprintReadOnly, Category = "Inventory|UI")
+	UPROPERTY(BlueprintReadOnly, Category = "DualNode|Inventory|UI")
 	TObjectPtr<class UDualNodeInventorySlotViewModel> SlotVM;
 
-	/** Event für Blueprints, um das Design zu aktualisieren */
-	UFUNCTION(BlueprintImplementableEvent, Category = "Inventory|UI")
+	/** Event für Blueprints zur visuellen Aktualisierung */
+	UFUNCTION(BlueprintImplementableEvent, Category = "DualNode|Inventory|UI")
 	void OnTooltipDataUpdated();
 };

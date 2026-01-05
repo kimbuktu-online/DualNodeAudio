@@ -2,6 +2,9 @@
 #include "DualNodeInventoryComponent.h"
 #include "DualNodeInventoryViewModel.h"
 #include "DualNodeContextMenu.h"
+#include "DualNodeItemTooltipWidget.h" // Zwingend erforderlich für volle Typ-Definition
+#include "DualNodeInventorySlotViewModel.h"
+#include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
 
 void UDualNodeInventoryWidget::InitializeInventory(UDualNodeInventoryComponent* InventoryComponent)
@@ -34,14 +37,13 @@ void UDualNodeInventoryWidget::OpenContextMenu(UDualNodeInventorySlotViewModel* 
 	{
 		ActiveContextMenu->InitializeMenu(SlotVM);
 		ActiveContextMenu->AddToViewport(1000); 
-
-		// FIX: bRemoveDPIScale = true konvertiert Screen-Pixel korrekt in Viewport-Einheiten
 		ActiveContextMenu->SetPositionInViewport(ScreenPosition, true);
 	}
 }
 
 void UDualNodeInventoryWidget::HandleSlotClick(UDualNodeInventorySlotViewModel* ClickedSlot)
 {
+	if (ActiveTooltip) HideTooltip();
 	if (ActiveContextMenu) { ActiveContextMenu->CloseMenu(); ActiveContextMenu = nullptr; }
 	if (!ClickedSlot || !CachedComponent) return;
 
@@ -80,6 +82,39 @@ void UDualNodeInventoryWidget::HandleSlotClick(UDualNodeInventorySlotViewModel* 
 	}
 }
 
+void UDualNodeInventoryWidget::ShowTooltip(UDualNodeInventorySlotViewModel* SlotVM, const FGeometry& SlotGeometry)
+{
+	if (!TooltipClass || !SlotVM) return;
+
+	if (!ActiveTooltip)
+	{
+		// Dank korrekter Build.cs und Header wird UDualNodeItemTooltipWidget nun als UUserWidget erkannt
+		ActiveTooltip = CreateWidget<UDualNodeItemTooltipWidget>(this, TooltipClass);
+		if (ActiveTooltip) 
+		{
+			ActiveTooltip->AddToViewport(1100);
+		}
+	}
+
+	if (ActiveTooltip)
+	{
+		ActiveTooltip->SetTooltipData(SlotVM);
+		ActiveTooltip->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+		// Positionierung relativ zum Slot
+		FVector2D TooltipPos = SlotGeometry.GetAbsolutePosition() + FVector2D(SlotGeometry.GetAbsoluteSize().X + 10.0f, 0.0f);
+		ActiveTooltip->SetPositionInViewport(TooltipPos, true);
+	}
+}
+
+void UDualNodeInventoryWidget::HideTooltip()
+{
+	if (ActiveTooltip)
+	{
+		ActiveTooltip->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
 FReply UDualNodeInventoryWidget::NativeOnMouseWheel(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
 	if (HeldItemVM)
@@ -111,31 +146,5 @@ void UDualNodeInventoryWidget::HandleSlotViewModelsChanged()
 	{
 		InventoryTileView->SetListItems(MainViewModel->SlotViewModels);
 		InventoryTileView->RequestRefresh();
-	}
-}
-
-void UDualNodeInventoryWidget::ShowTooltip(UDualNodeInventorySlotViewModel* SlotVM, const FGeometry& SlotGeometry)
-{
-	if (!TooltipClass || !SlotVM) return;
-
-	if (!ActiveTooltip)
-	{
-		ActiveTooltip = CreateWidget<UDualNodeItemTooltipWidget>(this, TooltipClass);
-		ActiveTooltip->AddToViewport(1100); // Über dem Inventar
-	}
-
-	ActiveTooltip->SetTooltipData(SlotVM);
-	ActiveTooltip->SetVisibility(ESlateVisibility::HitTestInvisible);
-
-	// Positionierung: Rechts neben dem Slot
-	FVector2D TooltipPos = SlotGeometry.GetAbsolutePosition() + FVector2D(SlotGeometry.GetAbsoluteSize().X + 10.0f, 0.0f);
-	ActiveTooltip->SetPositionInViewport(TooltipPos, true);
-}
-
-void UDualNodeInventoryWidget::HideTooltip()
-{
-	if (ActiveTooltip)
-	{
-		ActiveTooltip->SetVisibility(ESlateVisibility::Collapsed);
 	}
 }
