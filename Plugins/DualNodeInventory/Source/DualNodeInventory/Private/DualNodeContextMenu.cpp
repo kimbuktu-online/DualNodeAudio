@@ -23,13 +23,18 @@ UDualNodeInventoryComponent* UDualNodeContextMenu::GetOwningInventory() const
 
 const UDualNodeItemDefinition* UDualNodeContextMenu::GetTargetItemDefinition() const
 {
-	// Wir holen die Definition sicher aus dem ViewModel/InstanceGuid
-	if (TargetSlotVM)
+	if (TargetSlotVM && TargetSlotVM->ItemGuid.IsValid())
 	{
-		// In einer echten Umgebung würden wir hier über das Inventory gehen, 
-		// für das UI reicht uns der Zugriff auf die gecachte Definition der Instanz.
-		// Hinweis: Das ViewModel sollte idealerweise die Definition halten oder Zugriff darauf geben.
-		// Da wir SlotViewModel.h nicht ändern, greifen wir (falls vorhanden) auf interne Daten zu.
+		if (UDualNodeInventoryComponent* Inv = GetOwningInventory())
+		{
+			for (const FDualNodeItemInstance& Instance : Inv->GetItems())
+			{
+				if (Instance.InstanceGuid == TargetSlotVM->ItemGuid)
+				{
+					return Instance.CachedDefinition;
+				}
+			}
+		}
 	}
 	return nullptr;
 }

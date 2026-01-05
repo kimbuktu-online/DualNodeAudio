@@ -42,7 +42,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory|Config")
 	int32 HUDSlotCount = 5;
 
-	// --- LOGIC API ---
+	// --- LOGIK API ---
 
 	UFUNCTION(BlueprintPure, Category="Inventory")
 	bool CanAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount, FText& OutFailureReason) const;
@@ -93,12 +93,6 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	const TArray<FDualNodeItemInstance>& GetItems() const { return InventoryArray.Items; }
-
-	UFUNCTION(BlueprintCallable, Category="Inventory|Persistence")
-	FDualNodeInventorySaveData GetInventorySnapshot() const;
-
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Inventory|Persistence")
-	void LoadInventoryFromSnapshot(const FDualNodeInventorySaveData& Snapshot);
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void OnRep_Inventory();

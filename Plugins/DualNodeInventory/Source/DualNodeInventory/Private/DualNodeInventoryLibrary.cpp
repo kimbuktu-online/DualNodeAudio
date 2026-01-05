@@ -5,6 +5,7 @@
 #include "DualNodeItemFragment_Audio.h"
 #include "DualNodeItemFragment_UseAction.h"
 #include "DualNodeWorldItem.h"
+#include "GameplayTagAssetInterface.h" // FIX C2039: Header hinzugefügt
 #include "Kismet/GameplayStatics.h"
 #include "Algo/Sort.h"
 
@@ -15,10 +16,7 @@ UDualNodeInventoryComponent* UDualNodeInventoryLibrary::GetInventoryComponent(AA
 	return Target->FindComponentByClass<UDualNodeInventoryComponent>();
 }
 
-bool UDualNodeInventoryLibrary::ResolveItemDefinition(FDualNodeItemInstance& ItemInstance)
-{
-	return ItemInstance.ResolveDefinition();
-}
+bool UDualNodeInventoryLibrary::ResolveItemDefinition(FDualNodeItemInstance& ItemInstance) { return ItemInstance.ResolveDefinition(); }
 
 bool UDualNodeInventoryLibrary::TransferItem(UDualNodeInventoryComponent* Source, UDualNodeInventoryComponent* Destination, const UDualNodeItemDefinition* Item, int32 Amount)
 {
@@ -35,37 +33,25 @@ bool UDualNodeInventoryLibrary::SplitStack(UDualNodeInventoryComponent* Inventor
 {
 	if (!Inventory || !Item || Amount <= 0 || !Inventory->GetOwner()->HasAuthority()) return false;
 	if (Inventory->GetTotalAmountOfItem(Item) < Amount) return false;
-
-	if (Inventory->RemoveItem(Item, Amount))
-	{
-		return Inventory->TryAddItem(Item, Amount);
-	}
+	if (Inventory->RemoveItem(Item, Amount)) return Inventory->TryAddItem(Item, Amount);
 	return false;
 }
 
 ADualNodeWorldItem* UDualNodeInventoryLibrary::SpawnItemInWorld(AActor* Spawner, const UDualNodeItemDefinition* Item, int32 Amount, FVector Location)
 {
 	if (!Spawner || !Item || Amount <= 0 || !Spawner->HasAuthority()) return nullptr;
-
 	UWorld* World = Spawner->GetWorld();
 	ADualNodeWorldItem* WorldItem = World->SpawnActor<ADualNodeWorldItem>(ADualNodeWorldItem::StaticClass(), Location, FRotator::ZeroRotator);
-	
-	if (WorldItem)
-	{
-		WorldItem->InitializeItem(Item, Amount);
-		return WorldItem;
-	}
+	if (WorldItem) { WorldItem->InitializeItem(Item, Amount); return WorldItem; }
 	return nullptr;
 }
 
 bool UDualNodeInventoryLibrary::DropItem(AActor* Dropper, const UDualNodeItemDefinition* Item, int32 Amount)
 {
 	if (!Dropper || !Item || Amount <= 0 || !Dropper->HasAuthority()) return false;
-
 	UDualNodeInventoryComponent* Inv = GetInventoryComponent(Dropper);
 	if (Inv && Inv->RemoveItem(Item, Amount))
 	{
-		// DNA 2.2: Drop-Offset aus Settings
 		float Offset = UDualNodeInventorySettings::Get()->ItemDropForwardOffset;
 		FVector SpawnLoc = Dropper->GetActorLocation() + (Dropper->GetActorForwardVector() * Offset);
 		return SpawnItemInWorld(Dropper, Item, Amount, SpawnLoc) != nullptr;
@@ -88,21 +74,22 @@ void UDualNodeInventoryLibrary::SortInventory(UDualNodeInventoryComponent* Inven
 bool UDualNodeInventoryLibrary::UseItem(AActor* User, const UDualNodeItemDefinition* ItemDef, int32 FromSlotIndex)
 {
 	if (!User || !ItemDef) return false;
+
+	// DNA 2.2: Client-Side Tag Vorabprüfung (FIX: U-Klasse für Execute)
+	if (!ItemDef->ApplicationRequirements.IsEmpty() && User->Implements<UGameplayTagAssetInterface>())
+	{
+		FGameplayTagContainer OwnerTags;
+		UGameplayTagAssetInterface::Execute_GetOwnedGameplayTags(User, OwnerTags);
+		if (!ItemDef->ApplicationRequirements.Matches(OwnerTags)) return false;
+	}
+
 	UDualNodeInventoryComponent* Inv = GetInventoryComponent(User);
 	if (!Inv) return false;
-
 	const UDualNodeItemFragment* Frag = ItemDef->FindFragmentByClass(UDualNodeItemFragment_UseAction::StaticClass());
 	if (const UDualNodeItemFragment_UseAction* UseFrag = Cast<UDualNodeItemFragment_UseAction>(Frag))
 	{
-		for (const TObjectPtr<UDualNodeItemAction>& Action : UseFrag->Actions) 
-		{
-			if (Action) Action->ExecuteAction(User, Inv);
-		}
-
-		if (UseFrag->bConsumeOnUse)
-		{
-			Inv->RemoveItem(ItemDef, 1);
-		}
+		for (const TObjectPtr<UDualNodeItemAction>& Action : UseFrag->Actions) if (Action) Action->ExecuteAction(User, Inv);
+		if (UseFrag->bConsumeOnUse) Inv->RemoveItem(ItemDef, 1);
 		return true;
 	}
 	return false;
@@ -113,13 +100,6 @@ void UDualNodeInventoryLibrary::PlayItemSound(const UDualNodeItemDefinition* Ite
 	if (!Item || !ContextActor) return;
 	const UDualNodeItemFragment* Frag = Item->FindFragmentByClass(UDualNodeItemFragment_Audio::StaticClass());
 	if (const UDualNodeItemFragment_Audio* AudioFrag = Cast<UDualNodeItemFragment_Audio>(Frag))
-	{
 		if (const TObjectPtr<USoundBase>* SoundPtr = AudioFrag->SoundMap.Find(ActionTag))
-		{
-			if (USoundBase* Sound = SoundPtr->Get()) 
-			{
-				UGameplayStatics::PlaySoundAtLocation(ContextActor, Sound, ContextActor->GetActorLocation());
-			}
-		}
-	}
+			if (USoundBase* Sound = SoundPtr->Get()) UGameplayStatics::PlaySoundAtLocation(ContextActor, Sound, ContextActor->GetActorLocation());
 }
