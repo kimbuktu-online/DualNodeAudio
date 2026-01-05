@@ -17,7 +17,6 @@ void UDualNodeInventoryComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Initialisierung der leeren Slots auf dem Server
 	if (GetOwner() && GetOwner()->HasAuthority() && InventoryArray.Items.Num() == 0)
 	{
 		for (int32 i = 0; i < MaxSlotCount; i++)
@@ -83,7 +82,6 @@ void UDualNodeInventoryComponent::Server_UseItemInSlot_Implementation(int32 Slot
 	FDualNodeItemInstance& Slot = InventoryArray.Items[SlotIndex];
 	if (Slot.CachedDefinition)
 	{
-		// Die Library übernimmt die Verbrauchs-Logik (bConsumeOnUse)
 		UDualNodeInventoryLibrary::UseItem(GetOwner(), Slot.CachedDefinition, SlotIndex);
 		bGridCacheDirty = true;
 		OnRep_Inventory();
@@ -106,7 +104,6 @@ void UDualNodeInventoryComponent::Server_TransferQuantity_Implementation(int32 F
 
 	int32 MoveAmount = FMath::Min(Quantity, SourceSlot.StackCount);
 
-	// Ziel-Slot ist leer oder kompatibel für Stacking
 	if (!DestSlot.ItemId.IsValid() || (DestSlot.ItemId == SourceSlot.ItemId && DestSlot.StackCount < SourceSlot.CachedDefinition->MaxStackSize))
 	{
 		int32 CanFit = DestSlot.ItemId.IsValid() ? SourceSlot.CachedDefinition->MaxStackSize - DestSlot.StackCount : MoveAmount;
@@ -160,10 +157,8 @@ void UDualNodeInventoryComponent::RebuildGridCache()
 
 bool UDualNodeInventoryComponent::IsRegionFree(FIntPoint Location, FIntPoint Size, const FGuid& IgnoreInstance) const
 {
-	// Bounds Check
 	if (Location.X < 0 || Location.Y < 0 || (Location.X + Size.X) > GridSize.X || (Location.Y + Size.Y) > GridSize.Y) return false;
 
-	// Cache sicherstellen (const_cast für Performance-Caching erlaubt)
 	const_cast<UDualNodeInventoryComponent*>(this)->RebuildGridCache();
 
 	for (int32 X = 0; X < Size.X; ++X)
@@ -220,7 +215,6 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 	int32 Remaining = Amount;
 	FPrimaryAssetId Id = ItemDef->GetPrimaryAssetId();
 
-	// 1. Stacking Logik
 	if (ItemDef->bCanStack)
 	{
 		for (int32 i = 0; i < InventoryArray.Items.Num(); i++)
@@ -229,8 +223,6 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 			if (Slot.ItemId == Id && Slot.StackCount < ItemDef->MaxStackSize)
 			{
 				int32 ToAdd = FMath::Min(Remaining, ItemDef->MaxStackSize - Slot.StackCount);
-				
-				// Optional: Durability Merge Logic hier einfügen
 				Slot.StackCount += ToAdd;
 				Slot.ResolveDefinition();
 				Remaining -= ToAdd;
@@ -240,7 +232,6 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 		}
 	}
 
-	// 2. Freie Slots belegen
 	while (Remaining > 0)
 	{
 		int32 EmptyIdx = FindFirstEmptySlot();

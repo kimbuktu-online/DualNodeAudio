@@ -24,7 +24,6 @@ public:
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	/** Event, das bei jeder Änderung des Inventars gefeuert wird (genutzt von MVVM ViewModels) */
 	UPROPERTY(BlueprintAssignable, Category="Inventory")
 	FOnInventoryUpdated OnInventoryUpdated;
 	
@@ -34,7 +33,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory|Config", meta=(EditCondition="InventoryType == EDualNodeInventoryType::Spatial"))
 	FIntPoint GridSize = FIntPoint(10, 10);
 
-	/** Strategien zur Validierung von Gegenständen (Gewicht, Kategorien, etc.) */
 	UPROPERTY(EditAnywhere, Instanced, Category="Inventory|Config")
 	TArray<TObjectPtr<UDualNodeInventoryValidator>> Validators;
 
@@ -44,7 +42,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory|Config")
 	int32 HUDSlotCount = 5;
 
-	// --- LOGIK API ---
+	// --- LOGIC API ---
 
 	UFUNCTION(BlueprintPure, Category="Inventory")
 	bool CanAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount, FText& OutFailureReason) const;
@@ -77,7 +75,6 @@ public:
 	UFUNCTION(BlueprintPure, Category="Inventory|Spatial")
 	bool FindFirstFreeLocation(FIntPoint ItemSize, FIntPoint& OutLocation) const;
 
-	/** Erzwingt den Neuaufbau des Grid-Caches (wird intern automatisch verwaltet) */
 	void RebuildGridCache();
 
 	// --- GETTERS & UTILS ---
@@ -111,11 +108,9 @@ protected:
 	FDualNodeInventoryArray InventoryArray;
 
 private:
-	/** V2.2 Performance: Verhindert Heap-Allokationen während Grid-Kollisionsprüfungen */
 	UPROPERTY(Transient)
 	TMap<FIntPoint, FGuid> CachedOccupiedCells;
 	
-	/** Flag zur Entwertung des Caches bei Inventaränderungen */
 	bool bGridCacheDirty = true;
 
 	int32 FindStackableSlot(const UDualNodeItemDefinition* ItemDef) const;

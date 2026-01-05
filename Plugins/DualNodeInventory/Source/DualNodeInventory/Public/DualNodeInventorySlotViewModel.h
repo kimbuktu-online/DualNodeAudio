@@ -3,15 +3,19 @@
 #include "CoreMinimal.h"
 #include "MVVMViewModelBase.h"
 #include "DualNodeItemInstance.h"
+#include "Engine/StreamableManager.h"
 #include "DualNodeInventorySlotViewModel.generated.h"
 
+/**
+ * DNA 2.2 - Slot ViewModel mit Unterstützung für asynchrones Icon-Loading.
+ */
 UCLASS(BlueprintType)
 class DUALNODEINVENTORY_API UDualNodeInventorySlotViewModel : public UMVVMViewModelBase
 {
 	GENERATED_BODY()
 
 public:
-	/** V2.0: Benötigt nun die Komponente für die Haltbarkeits-Berechnung */
+	/** Aktualisiert die Slot-Daten und stößt bei Bedarf das asynchrone Laden des Icons an. */
 	void UpdateSlot(const FDualNodeItemInstance& ItemInstance, int32 InSlotIndex, class UDualNodeInventoryComponent* InInventory);
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Display")
@@ -31,8 +35,6 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Display")
 	FColor RarityColor;
-
-	// --- V2.0 DURABILITY DATA ---
 
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Display")
 	float DurabilityPercent = 1.0f;
@@ -55,19 +57,26 @@ public:
 	UPROPERTY(BlueprintReadOnly, FieldNotify, Category = "Logic")
 	FGuid ItemGuid;
 
+private:
+	/** Handle für den laufenden Ladevorgang (Vermeidet doppeltes Laden) */
+	TSharedPtr<FStreamableHandle> IconLoadHandle;
+	
+	/** Callback für den AssetManager */
+	void OnIconLoaded(TSoftObjectPtr<UTexture2D> LoadedIcon);
+
 protected:
-	void SetDurabilityPercent(float NewValue);
-	void SetDurabilityCountdownText(FText NewValue);
-	void SetShowDurability(bool bNewValue);
 	void SetItemIcon(TObjectPtr<UTexture2D> NewValue);
 	void SetItemName(FText NewValue);
+	void SetItemDescription(FText NewValue);
 	void SetQuantityText(FText NewValue);
 	void SetStackCount(int32 NewValue);
 	void SetRarityColor(FColor NewValue);
+	void SetDurabilityPercent(float NewValue);
+	void SetDurabilityCountdownText(FText NewValue);
+	void SetShowDurability(bool bNewValue);
 	void SetIsUsable(bool bNewValue);
 
 public:
-	/** Hilfsfunktion zum Setzen des Ghost-Status */
 	UFUNCTION(BlueprintCallable, Category = "DualNode|Inventory")
 	void SetIsSourceOfTransfer(bool bNewValue) { UE_MVVM_SET_PROPERTY_VALUE(bIsSourceOfTransfer, bNewValue); }
 };
