@@ -1,6 +1,7 @@
 ﻿#include "DualNodeInventoryLibrary.h"
 #include "DualNodeInventoryComponent.h"
 #include "DualNodeInventoryInterface.h"
+#include "DualNodeInventorySettings.h"
 #include "DualNodeItemFragment_Audio.h"
 #include "DualNodeItemFragment_UseAction.h"
 #include "DualNodeWorldItem.h"
@@ -64,7 +65,9 @@ bool UDualNodeInventoryLibrary::DropItem(AActor* Dropper, const UDualNodeItemDef
 	UDualNodeInventoryComponent* Inv = GetInventoryComponent(Dropper);
 	if (Inv && Inv->RemoveItem(Item, Amount))
 	{
-		FVector SpawnLoc = Dropper->GetActorLocation() + (Dropper->GetActorForwardVector() * 100.0f);
+		// DNA 2.2: Drop-Offset aus Settings
+		float Offset = UDualNodeInventorySettings::Get()->ItemDropForwardOffset;
+		FVector SpawnLoc = Dropper->GetActorLocation() + (Dropper->GetActorForwardVector() * Offset);
 		return SpawnItemInWorld(Dropper, Item, Amount, SpawnLoc) != nullptr;
 	}
 	return false;
@@ -98,18 +101,7 @@ bool UDualNodeInventoryLibrary::UseItem(AActor* User, const UDualNodeItemDefinit
 
 		if (UseFrag->bConsumeOnUse)
 		{
-			// Wenn wir einen SlotIndex haben, ziehen wir direkt von dort ab (UX-Fix)
-			if (FromSlotIndex != -1)
-			{
-				// Wir lassen die Component das Handling übernehmen oder rufen RemoveItem auf.
-				// Da RemoveItem global sucht, nutzen wir hier besser den direkten Slot-Weg.
-				// In dieser Library-Funktion ist RemoveItem jedoch der Standard-Fallback.
-				Inv->RemoveItem(ItemDef, 1);
-			}
-			else
-			{
-				Inv->RemoveItem(ItemDef, 1);
-			}
+			Inv->RemoveItem(ItemDef, 1);
 		}
 		return true;
 	}

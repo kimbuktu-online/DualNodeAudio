@@ -1,8 +1,8 @@
 ﻿#include "DualNodeInteractionComponent.h"
 #include "DualNodeInteractionInterface.h"
+#include "DualNodeInventorySettings.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
-#include "Logging/StructuredLog.h"
 
 UDualNodeInteractionComponent::UDualNodeInteractionComponent()
 {
@@ -21,7 +21,6 @@ void UDualNodeInteractionComponent::TraceForInteractables()
 	AActor* Owner = GetOwner();
 	if (!Owner) return;
 
-	// FIX: PlayerController sicher über den Pawn-Owner abrufen
 	APlayerController* PC = nullptr;
 	if (APawn* PawnOwner = Cast<APawn>(Owner))
 	{
@@ -30,12 +29,17 @@ void UDualNodeInteractionComponent::TraceForInteractables()
 	
 	if (!PC) return;
 
+	// DNA 2.2: Settings abrufen
+	const UDualNodeInventorySettings* Settings = UDualNodeInventorySettings::Get();
+	float TraceRange = Settings ? Settings->DefaultInteractionRange : InteractionRange;
+	ECollisionChannel TraceChannel = Settings ? Settings->InteractionTraceChannel.GetValue() : InteractionChannel.GetValue();
+
 	FVector CameraLocation;
 	FRotator CameraRotation;
 	PC->GetPlayerViewPoint(CameraLocation, CameraRotation);
 
 	const FVector TraceStart = CameraLocation;
-	const FVector TraceEnd = TraceStart + (CameraRotation.Vector() * InteractionRange);
+	const FVector TraceEnd = TraceStart + (CameraRotation.Vector() * TraceRange);
 
 	FHitResult HitResult;
 	FCollisionQueryParams Params;
@@ -43,7 +47,7 @@ void UDualNodeInteractionComponent::TraceForInteractables()
 
 	AActor* NewFocus = nullptr;
 
-	if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, InteractionChannel, Params))
+	if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, TraceChannel, Params))
 	{
 		AActor* HitActor = HitResult.GetActor();
 		if (HitActor && HitActor->Implements<UDualNodeInteractionInterface>())
@@ -61,6 +65,7 @@ void UDualNodeInteractionComponent::TraceForInteractables()
 		OnFocusedActorChanged.Broadcast(CurrentFocusedActor);
 	}
 }
+
 void UDualNodeInteractionComponent::PerformInteraction()
 {
 	if (CurrentFocusedActor && CurrentFocusedActor->Implements<UDualNodeInteractionInterface>())

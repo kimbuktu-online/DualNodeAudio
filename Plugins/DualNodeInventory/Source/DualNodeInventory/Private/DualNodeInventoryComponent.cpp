@@ -1,4 +1,5 @@
 ﻿#include "DualNodeInventoryComponent.h"
+#include "DualNodeInventorySettings.h"
 #include "Net/UnrealNetwork.h"
 #include "DualNodeItemDefinition.h"
 #include "DualNodeInventoryLibrary.h"
@@ -11,6 +12,13 @@ UDualNodeInventoryComponent::UDualNodeInventoryComponent()
 {
 	SetIsReplicatedByDefault(true);
 	InventoryArray.OwnerComponent = this;
+
+	// DNA 2.2: Initiale Werte aus Project Settings laden
+	if (const UDualNodeInventorySettings* Settings = UDualNodeInventorySettings::Get())
+	{
+		MaxSlotCount = Settings->DefaultMaxSlotCount;
+		HUDSlotCount = Settings->DefaultHUDSlotCount;
+	}
 }
 
 void UDualNodeInventoryComponent::BeginPlay()
@@ -32,8 +40,6 @@ void UDualNodeInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimePro
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(UDualNodeInventoryComponent, InventoryArray);
 }
-
-// --- V2.2 ANTI-CHEAT VALIDATION & RPCs ---
 
 bool UDualNodeInventoryComponent::Server_SwapSlots_Validate(int32 From, int32 To)
 {
@@ -59,7 +65,10 @@ void UDualNodeInventoryComponent::Server_DropFromSlot_Implementation(int32 SlotI
 	if (!Slot.CachedDefinition || Slot.StackCount <= 0) return;
 
 	int32 DropAmount = FMath::Min(Amount, Slot.StackCount);
-	FVector SpawnLoc = GetOwner()->GetActorLocation() + (GetOwner()->GetActorForwardVector() * 100.0f);
+	
+	// DNA 2.2: Drop Offset aus Settings
+	float DropDist = UDualNodeInventorySettings::Get()->ItemDropForwardOffset;
+	FVector SpawnLoc = GetOwner()->GetActorLocation() + (GetOwner()->GetActorForwardVector() * DropDist);
 	
 	if (UDualNodeInventoryLibrary::SpawnItemInWorld(GetOwner(), Slot.CachedDefinition, DropAmount, SpawnLoc))
 	{
@@ -128,8 +137,6 @@ void UDualNodeInventoryComponent::Server_TransferQuantity_Implementation(int32 F
 	}
 }
 
-// --- V2.2 GRID CACHING ---
-
 void UDualNodeInventoryComponent::RebuildGridCache()
 {
 	if (!bGridCacheDirty) return;
@@ -189,8 +196,6 @@ bool UDualNodeInventoryComponent::FindFirstFreeLocation(FIntPoint ItemSize, FInt
 	}
 	return false;
 }
-
-// --- CORE LOGIC (ITEM HANDLING) ---
 
 bool UDualNodeInventoryComponent::CanAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount, FText& OutFailureReason) const
 {
@@ -290,8 +295,6 @@ bool UDualNodeInventoryComponent::RemoveItem(const UDualNodeItemDefinition* Item
 	OnRep_Inventory();
 	return true;
 }
-
-// --- UTILS & GETTERS ---
 
 void UDualNodeInventoryComponent::InitializeDurability(FDualNodeItemInstance& Instance, const UDualNodeItemDefinition* ItemDef)
 {

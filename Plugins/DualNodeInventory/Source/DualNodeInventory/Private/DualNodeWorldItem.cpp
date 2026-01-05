@@ -3,6 +3,7 @@
 #include "DualNodeItemDefinition.h"
 #include "DualNodeItemFragment_Mesh.h"
 #include "DualNodeInventoryLibrary.h"
+#include "DualNodeInventorySettings.h"
 #include "Net/UnrealNetwork.h"
 #include "Engine/AssetManager.h"
 
@@ -30,25 +31,18 @@ void ADualNodeWorldItem::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 
-	// Editor-Vorschau: Lädt die Definition synchron, um das Mesh anzuzeigen
 	if (ItemToGive.IsValid())
 	{
 		UAssetManager& AssetManager = UAssetManager::Get();
-		
 		if (UDualNodeItemDefinition* Def = Cast<UDualNodeItemDefinition>(AssetManager.GetPrimaryAssetObject(ItemToGive)))
 		{
 			UpdateVisualsFromDefinition(Def);
 		}
 		else
 		{
-			// FIX: Nutze AssetManager, um den Pfad für FPrimaryAssetId zu erhalten
 			FSoftObjectPath AssetPath = AssetManager.GetPrimaryAssetPath(ItemToGive);
 			UDualNodeItemDefinition* LoadedDef = Cast<UDualNodeItemDefinition>(AssetPath.TryLoad());
-			
-			if (LoadedDef)
-			{
-				UpdateVisualsFromDefinition(LoadedDef);
-			}
+			if (LoadedDef) UpdateVisualsFromDefinition(LoadedDef);
 		}
 	}
 }
@@ -56,10 +50,8 @@ void ADualNodeWorldItem::OnConstruction(const FTransform& Transform)
 void ADualNodeWorldItem::InitializeItem(const UDualNodeItemDefinition* InDefinition, int32 InAmount)
 {
 	if (!InDefinition) return;
-
 	ItemToGive = InDefinition->GetPrimaryAssetId();
 	Amount = InAmount;
-	
 	UpdateVisualsFromDefinition(InDefinition);
 }
 
@@ -80,30 +72,22 @@ void ADualNodeWorldItem::UpdateVisualsFromDefinition(const UDualNodeItemDefiniti
 
 bool ADualNodeWorldItem::PickUp(AActor* Interactor)
 {
-	// 1. WICHTIG: Nur der Server darf Items einsammeln/löschen
 	if (!HasAuthority()) return false;
 
 	if (UDualNodeInventoryComponent* Inv = UDualNodeInventoryLibrary::GetInventoryComponent(Interactor))
 	{
 		UAssetManager& AssetManager = UAssetManager::Get();
-		
-		// 2. Asset finden oder zur Not synchron laden
 		UDualNodeItemDefinition* ItemDef = Cast<UDualNodeItemDefinition>(AssetManager.GetPrimaryAssetObject(ItemToGive));
-		if (!ItemDef)
-		{
-			ItemDef = Cast<UDualNodeItemDefinition>(AssetManager.GetPrimaryAssetPath(ItemToGive).TryLoad());
-		}
+		if (!ItemDef) ItemDef = Cast<UDualNodeItemDefinition>(AssetManager.GetPrimaryAssetPath(ItemToGive).TryLoad());
 
 		if (!ItemDef) return false;
 
-		// 3. Item dem Inventar hinzufügen
 		if (Inv->TryAddItem(ItemDef, Amount))
 		{
-			// 4. Sound-Tag sicher anfordern (ohne Fehlermeldung)
-			FGameplayTag PickupTag = FGameplayTag::RequestGameplayTag(TEXT("Event.Inventory.Pickup"), false);
+			// DNA 2.2: Pickup Tag aus Settings
+			FGameplayTag PickupTag = UDualNodeInventorySettings::Get()->DefaultPickupTag;
 			UDualNodeInventoryLibrary::PlayItemSound(ItemDef, PickupTag, Interactor);
 			
-			// 5. Item aus der Welt löschen
 			Destroy();
 			return true;
 		}
