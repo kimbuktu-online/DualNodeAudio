@@ -3,6 +3,7 @@
 #include "DualNodeItemDefinition.h"
 #include "DualNodeInventoryLibrary.h"
 #include "DualNodeItemFragment_Durability.h"
+#include "DualNodeItemFragment_Spatial.h"
 #include "GameFramework/GameStateBase.h"
 #include "Engine/World.h"
 
@@ -15,6 +16,8 @@ UDualNodeInventoryComponent::UDualNodeInventoryComponent()
 void UDualNodeInventoryComponent::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Initialisierung der Slots auf dem Server
 	if (GetOwner() && GetOwner()->HasAuthority() && InventoryArray.Items.Num() == 0)
 	{
 		for (int32 i = 0; i < MaxSlotCount; i++)
@@ -34,10 +37,13 @@ void UDualNodeInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimePro
 bool UDualNodeInventoryComponent::CanAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount, FText& OutFailureReason) const
 {
 	if (!ItemDef || Amount <= 0) return false;
+
+	// Validierung durch externe Strategien (Gewicht, Kategorien, Grid-Platz)
 	for (const TObjectPtr<UDualNodeInventoryValidator>& ValidatorPtr : Validators)
 	{
 		if (ValidatorPtr && !ValidatorPtr->CanAddItem(this, ItemDef, Amount, OutFailureReason)) return false;
 	}
+
 	if (ItemDef->bCanStack && FindStackableSlot(ItemDef) != INDEX_NONE) return true;
 	return FindFirstEmptySlot() != INDEX_NONE;
 }
@@ -52,7 +58,7 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 	int32 Remaining = Amount;
 	FPrimaryAssetId Id = ItemDef->GetPrimaryAssetId();
 
-	// 1. STACKING LOGIK (mit V2.0 Durability Merge)
+	// 1. STACKING LOGIK (mit Durability Merge für Lebensmittel)
 	if (ItemDef->bCanStack)
 	{
 		for (int32 i = 0; i < InventoryArray.Items.Num(); i++)
@@ -62,7 +68,7 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 			{
 				int32 ToAdd = FMath::Min(Remaining, ItemDef->MaxStackSize - Slot.StackCount);
 				
-				// Green Hell Merge Modell
+				// Green Hell Merge Modell: Gewichteter Durchschnitt des Verfalls
 				const UDualNodeItemFragment* Frag = ItemDef->FindFragmentByClass(UDualNodeItemFragment_Durability::StaticClass());
 				if (const UDualNodeItemFragment_Durability* DurFrag = Cast<UDualNodeItemFragment_Durability>(Frag))
 				{
@@ -87,7 +93,7 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 		}
 	}
 
-	// 2. NEUE SLOTS (HUD-Priority)
+	// 2. NEUE SLOTS BELEGEN (Priorisiert HUD-Slots & Spatial Grid)
 	while (Remaining > 0)
 	{
 		int32 EmptyIdx = FindFirstEmptySlot();
@@ -99,8 +105,21 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 		Slot.StackCount = FMath::Min(Remaining, ItemDef->MaxStackSize);
 		Slot.InstanceGuid = FGuid::NewGuid();
 		
-		InitializeDurability(Slot, ItemDef);
+		// Spatial Logik: Findet freien Platz im Grid
+		if (InventoryType == EDualNodeInventoryType::Spatial)
+		{
+			const UDualNodeItemFragment* SpatialFrag = ItemDef->FindFragmentByClass(UDualNodeItemFragment_Spatial::StaticClass());
+			FIntPoint ItemSize = SpatialFrag ? Cast<UDualNodeItemFragment_Spatial>(SpatialFrag)->Dimensions : FIntPoint(1, 1);
+			
+			FIntPoint FoundLoc;
+			if (FindFirstFreeLocation(ItemSize, FoundLoc))
+			{
+				Slot.GridLocation = FoundLoc;
+			}
+			else return false; // Abbruch: Kein Grid-Platz
+		}
 
+		InitializeDurability(Slot, ItemDef);
 		Remaining -= Slot.StackCount;
 		InventoryArray.MarkItemDirty(Slot);
 	}
@@ -152,9 +171,11 @@ float UDualNodeInventoryComponent::GetItemDurabilityPercent(int32 SlotIndex) con
 
 int32 UDualNodeInventoryComponent::FindFirstEmptySlot() const
 {
+	// HUD-Slots 0-4 zuerst prüfen
 	for (int32 i = 0; i < FMath::Min(HUDSlotCount, InventoryArray.Items.Num()); i++)
 		if (!InventoryArray.Items[i].ItemId.IsValid()) return i;
 	
+	// Dann Rest des Inventars
 	for (int32 i = HUDSlotCount; i < InventoryArray.Items.Num(); i++)
 		if (!InventoryArray.Items[i].ItemId.IsValid()) return i;
 
@@ -166,6 +187,7 @@ int32 UDualNodeInventoryComponent::FindStackableSlot(const UDualNodeItemDefiniti
 	if (!ItemDef) return INDEX_NONE;
 	FPrimaryAssetId Id = ItemDef->GetPrimaryAssetId();
 
+	// HUD-Priorität beim Stapeln
 	for (int32 i = 0; i < FMath::Min(HUDSlotCount, InventoryArray.Items.Num()); i++)
 		if (InventoryArray.Items[i].ItemId == Id && InventoryArray.Items[i].StackCount < ItemDef->MaxStackSize) return i;
 
@@ -174,6 +196,53 @@ int32 UDualNodeInventoryComponent::FindStackableSlot(const UDualNodeItemDefiniti
 
 	return INDEX_NONE;
 }
+
+// --- SPATIAL GRID LOGIK ---
+
+void UDualNodeInventoryComponent::GetOccupiedCells(TMap<FIntPoint, FGuid>& OutOccupiedPoints) const
+{
+	OutOccupiedPoints.Empty();
+	for (const FDualNodeItemInstance& Instance : InventoryArray.Items)
+	{
+		if (!Instance.ItemId.IsValid() || Instance.GridLocation == FIntPoint(-1, -1)) continue;
+
+		const UDualNodeItemFragment* Frag = Instance.CachedDefinition->FindFragmentByClass(UDualNodeItemFragment_Spatial::StaticClass());
+		FIntPoint Size = Frag ? Cast<UDualNodeItemFragment_Spatial>(Frag)->Dimensions : FIntPoint(1, 1);
+		if (Instance.bIsRotated) { int32 Temp = Size.X; Size.X = Size.Y; Size.Y = Temp; }
+
+		for (int32 X = 0; X < Size.X; ++X)
+			for (int32 Y = 0; Y < Size.Y; ++Y)
+				OutOccupiedPoints.Add(Instance.GridLocation + FIntPoint(X, Y), Instance.InstanceGuid);
+	}
+}
+
+bool UDualNodeInventoryComponent::IsRegionFree(FIntPoint Location, FIntPoint Size, const FGuid& IgnoreInstance) const
+{
+	if (Location.X < 0 || Location.Y < 0 || (Location.X + Size.X) > GridSize.X || (Location.Y + Size.Y) > GridSize.Y) return false;
+
+	TMap<FIntPoint, FGuid> OccupiedCells;
+	GetOccupiedCells(OccupiedCells);
+
+	for (int32 X = 0; X < Size.X; ++X)
+	{
+		for (int32 Y = 0; Y < Size.Y; ++Y)
+		{
+			if (const FGuid* FoundGuid = OccupiedCells.Find(Location + FIntPoint(X, Y)))
+				if (*FoundGuid != IgnoreInstance) return false;
+		}
+	}
+	return true;
+}
+
+bool UDualNodeInventoryComponent::FindFirstFreeLocation(FIntPoint ItemSize, FIntPoint& OutLocation) const
+{
+	for (int32 Y = 0; Y <= GridSize.Y - ItemSize.Y; ++Y)
+		for (int32 X = 0; X <= GridSize.X - ItemSize.X; ++X)
+			if (IsRegionFree(FIntPoint(X, Y), ItemSize)) { OutLocation = FIntPoint(X, Y); return true; }
+	return false;
+}
+
+// --- STANDARD INVENTAR OPERATIONEN ---
 
 bool UDualNodeInventoryComponent::RemoveItem(const UDualNodeItemDefinition* ItemDef, int32 Amount)
 {
@@ -285,7 +354,7 @@ int32 UDualNodeInventoryComponent::GetTotalAmountOfItemById(FPrimaryAssetId Item
 float UDualNodeInventoryComponent::GetTotalWeight() const
 {
 	float Weight = 0.0f;
-	for (const auto& Item : InventoryArray.Items) if (Item.CachedDefinition) Weight += (Item.CachedDefinition->ItemWeight * Item.StackCount);
+	for (const auto& Item : InventoryArray.Items) if (Item.CachedDefinition) Weight += (Item.CachedDefinition->ItemWeight * (float)Item.StackCount);
 	return Weight;
 }
 

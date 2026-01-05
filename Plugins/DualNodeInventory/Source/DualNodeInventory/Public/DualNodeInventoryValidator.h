@@ -42,3 +42,12 @@ public:
 
 	virtual bool CanAddItem_Implementation(const UDualNodeInventoryComponent* Inventory, const UDualNodeItemDefinition* Item, int32 Amount, FText& OutFailureMessage) const override;
 };
+
+/** Validator: Prüft räumliche Verfügbarkeit im Grid-Modus */
+UCLASS(meta=(DisplayName="Rule: Grid Space Constraint"))
+class DUALNODEINVENTORY_API UDualNodeValidator_GridSpace : public UDualNodeInventoryValidator
+{
+	GENERATED_BODY()
+public:
+	virtual bool CanAddItem_Implementation(const UDualNodeInventoryComponent* Inventory, const UDualNodeItemDefinition* Item, int32 Amount, FText& OutFailureMessage) const override;
+};

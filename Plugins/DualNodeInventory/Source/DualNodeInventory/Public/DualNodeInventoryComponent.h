@@ -26,6 +26,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory|Config")
 	EDualNodeInventoryType InventoryType = EDualNodeInventoryType::Classic;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory|Config", meta=(EditCondition="InventoryType == EDualNodeInventoryType::Spatial"))
+	FIntPoint GridSize = FIntPoint(10, 10);
+
 	UPROPERTY(EditAnywhere, Instanced, Category="Inventory|Config")
 	TArray<TObjectPtr<UDualNodeInventoryValidator>> Validators;
 
@@ -57,6 +60,14 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Inventory")
 	void Server_TransferQuantity(int32 FromIndex, int32 ToIndex, int32 Quantity, UDualNodeInventoryComponent* TargetInventory = nullptr);
+
+	// --- SPATIAL GRID API ---
+
+	UFUNCTION(BlueprintPure, Category="Inventory|Spatial")
+	bool IsRegionFree(FIntPoint Location, FIntPoint Size, const FGuid& IgnoreInstance = FGuid()) const;
+
+	UFUNCTION(BlueprintPure, Category="Inventory|Spatial")
+	bool FindFirstFreeLocation(FIntPoint ItemSize, FIntPoint& OutLocation) const;
 
 	// --- GETTERS & UTILS ---
 
@@ -92,4 +103,7 @@ private:
 	int32 FindStackableSlot(const UDualNodeItemDefinition* ItemDef) const;
 	int32 FindFirstEmptySlot() const;
 	void InitializeDurability(FDualNodeItemInstance& Instance, const UDualNodeItemDefinition* ItemDef);
+	
+	/** Erstellt eine Map aller belegten Grid-Zellen für die Kollisionsprüfung */
+	void GetOccupiedCells(TMap<FIntPoint, FGuid>& OutOccupiedPoints) const;
 };
