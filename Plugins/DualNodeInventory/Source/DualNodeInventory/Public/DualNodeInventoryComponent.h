@@ -11,7 +11,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInventoryUpdated, UDualNodeInvent
 
 /**
  * DNA 2.2 - Core Inventory Component.
- * Fokus: Multiplayer-Sicherheit (Anti-Cheat) und hochperformantes räumliches Grid-Management.
+ * Fokus: Multiplayer-Sicherheit, Performance (Grid-Caching) und AAA-Konfiguration.
  */
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class DUALNODEINVENTORY_API UDualNodeInventoryComponent : public UActorComponent
@@ -93,6 +93,14 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	const TArray<FDualNodeItemInstance>& GetItems() const { return InventoryArray.Items; }
+
+	// --- PERSISTENCE ---
+
+	UFUNCTION(BlueprintCallable, Category="Inventory|Persistence")
+	FDualNodeInventorySaveData GetInventorySnapshot() const;
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Inventory|Persistence")
+	void LoadInventoryFromSnapshot(const FDualNodeInventorySaveData& Snapshot);
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void OnRep_Inventory();

@@ -5,7 +5,7 @@
 #include "DualNodeInventoryLibrary.h"
 #include "DualNodeItemFragment_Durability.h"
 #include "DualNodeItemFragment_Spatial.h"
-#include "GameplayTagAssetInterface.h" // FIX C2065: Header hinzugefügt
+#include "GameplayTagAssetInterface.h"
 #include "GameFramework/GameStateBase.h"
 #include "Engine/World.h"
 
@@ -60,13 +60,13 @@ bool UDualNodeInventoryComponent::Server_UseItemInSlot_Validate(int32 SlotIndex)
 	const FDualNodeItemInstance& Slot = InventoryArray.Items[SlotIndex];
 	if (Slot.CachedDefinition)
 	{
-		// DNA 2.2: Gameplay Tag Requirement Check auf dem Server (FIX C2653/C3861: U-Klasse statt I-Klasse für Execute)
+		// FIX: Interface Cast statt Execute_ (GameplayTags Interface ist ein C++ Interface)
 		if (!Slot.CachedDefinition->ApplicationRequirements.IsEmpty())
 		{
-			if (GetOwner()->Implements<UGameplayTagAssetInterface>())
+			if (IGameplayTagAssetInterface* TagInterface = Cast<IGameplayTagAssetInterface>(GetOwner()))
 			{
 				FGameplayTagContainer OwnerTags;
-				UGameplayTagAssetInterface::Execute_GetOwnedGameplayTags(GetOwner(), OwnerTags);
+				TagInterface->GetOwnedGameplayTags(OwnerTags);
 				if (!Slot.CachedDefinition->ApplicationRequirements.Matches(OwnerTags)) return false;
 			}
 		}
@@ -84,6 +84,19 @@ void UDualNodeInventoryComponent::Server_UseItemInSlot_Implementation(int32 Slot
 		bGridCacheDirty = true;
 		OnRep_Inventory();
 	}
+}
+
+bool UDualNodeInventoryComponent::CanAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount, FText& OutFailureReason) const
+{
+	if (!ItemDef || Amount <= 0) return false;
+
+	for (const TObjectPtr<UDualNodeInventoryValidator>& ValidatorPtr : Validators)
+	{
+		if (ValidatorPtr && !ValidatorPtr->CanAddItem(this, ItemDef, Amount, OutFailureReason)) return false;
+	}
+
+	if (ItemDef->bCanStack && FindStackableSlot(ItemDef) != INDEX_NONE) return true;
+	return FindFirstEmptySlot() != INDEX_NONE;
 }
 
 bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount)
@@ -105,7 +118,7 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 			{
 				int32 ToAdd = FMath::Min(Remaining, ItemDef->MaxStackSize - Slot.StackCount);
 				
-				// RECOVERY: Green Hell Merge Logik
+				// Green Hell Merge Logik
 				const UDualNodeItemFragment* Frag = ItemDef->FindFragmentByClass(UDualNodeItemFragment_Durability::StaticClass());
 				if (const UDualNodeItemFragment_Durability* DurFrag = Cast<UDualNodeItemFragment_Durability>(Frag))
 				{
@@ -343,6 +356,38 @@ int32 UDualNodeInventoryComponent::GetTotalAmountOfItemById(FPrimaryAssetId Item
 }
 
 int32 UDualNodeInventoryComponent::GetTotalAmountOfItem(const UDualNodeItemDefinition* ItemDef) const { return ItemDef ? GetTotalAmountOfItemById(ItemDef->GetPrimaryAssetId()) : 0; }
+
+FDualNodeInventorySaveData UDualNodeInventoryComponent::GetInventorySnapshot() const
+{
+	FDualNodeInventorySaveData Snapshot;
+	for (const auto& Item : InventoryArray.Items)
+	{
+		if (!Item.ItemId.IsValid()) continue;
+		FDualNodeItemSaveData Data;
+		Data.ItemId = Item.ItemId; 
+		Data.StackCount = Item.StackCount; 
+		Data.InstanceGuid = Item.InstanceGuid;
+		Snapshot.SavedItems.Add(Data);
+	}
+	return Snapshot;
+}
+
+void UDualNodeInventoryComponent::LoadInventoryFromSnapshot(const FDualNodeInventorySaveData& Snapshot)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority()) return;
+	InventoryArray.Items.Empty();
+	for (const auto& S : Snapshot.SavedItems)
+	{
+		FDualNodeItemInstance NewItem;
+		NewItem.ItemId = S.ItemId; 
+		NewItem.StackCount = S.StackCount; 
+		NewItem.InstanceGuid = S.InstanceGuid;
+		NewItem.ResolveDefinition();
+		InventoryArray.Items.Add(NewItem);
+	}
+	InventoryArray.MarkArrayDirty();
+	OnRep_Inventory();
+}
 
 void UDualNodeInventoryComponent::OnRep_Inventory()
 {

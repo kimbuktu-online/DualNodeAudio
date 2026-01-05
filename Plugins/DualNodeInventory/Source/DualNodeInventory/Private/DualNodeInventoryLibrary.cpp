@@ -5,7 +5,7 @@
 #include "DualNodeItemFragment_Audio.h"
 #include "DualNodeItemFragment_UseAction.h"
 #include "DualNodeWorldItem.h"
-#include "GameplayTagAssetInterface.h" // FIX C2039: Header hinzugefügt
+#include "GameplayTagAssetInterface.h"
 #include "Kismet/GameplayStatics.h"
 #include "Algo/Sort.h"
 
@@ -75,12 +75,15 @@ bool UDualNodeInventoryLibrary::UseItem(AActor* User, const UDualNodeItemDefinit
 {
 	if (!User || !ItemDef) return false;
 
-	// DNA 2.2: Client-Side Tag Vorabprüfung (FIX: U-Klasse für Execute)
-	if (!ItemDef->ApplicationRequirements.IsEmpty() && User->Implements<UGameplayTagAssetInterface>())
+	// DNA 2.2: Client-Side Tag Vorabprüfung (FIX: Interface Cast)
+	if (!ItemDef->ApplicationRequirements.IsEmpty())
 	{
-		FGameplayTagContainer OwnerTags;
-		UGameplayTagAssetInterface::Execute_GetOwnedGameplayTags(User, OwnerTags);
-		if (!ItemDef->ApplicationRequirements.Matches(OwnerTags)) return false;
+		if (IGameplayTagAssetInterface* TagInterface = Cast<IGameplayTagAssetInterface>(User))
+		{
+			FGameplayTagContainer OwnerTags;
+			TagInterface->GetOwnedGameplayTags(OwnerTags);
+			if (!ItemDef->ApplicationRequirements.Matches(OwnerTags)) return false;
+		}
 	}
 
 	UDualNodeInventoryComponent* Inv = GetInventoryComponent(User);
