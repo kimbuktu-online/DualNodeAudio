@@ -9,6 +9,10 @@
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInventoryUpdated, UDualNodeInventoryComponent*, Component);
 
+/**
+ * DNA 2.2 - Core Inventory Component.
+ * Fokus: Multiplayer-Sicherheit (Anti-Cheat) und hochperformantes räumliches Grid-Management.
+ */
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class DUALNODEINVENTORY_API UDualNodeInventoryComponent : public UActorComponent
 {
@@ -20,6 +24,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	/** Event, das bei jeder Änderung des Inventars gefeuert wird (genutzt von MVVM ViewModels) */
 	UPROPERTY(BlueprintAssignable, Category="Inventory")
 	FOnInventoryUpdated OnInventoryUpdated;
 	
@@ -29,6 +34,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory|Config", meta=(EditCondition="InventoryType == EDualNodeInventoryType::Spatial"))
 	FIntPoint GridSize = FIntPoint(10, 10);
 
+	/** Strategien zur Validierung von Gegenständen (Gewicht, Kategorien, etc.) */
 	UPROPERTY(EditAnywhere, Instanced, Category="Inventory|Config")
 	TArray<TObjectPtr<UDualNodeInventoryValidator>> Validators;
 
@@ -37,6 +43,8 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory|Config")
 	int32 HUDSlotCount = 5;
+
+	// --- LOGIK API ---
 
 	UFUNCTION(BlueprintPure, Category="Inventory")
 	bool CanAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount, FText& OutFailureReason) const;
@@ -47,27 +55,30 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Inventory")
 	bool RemoveItem(const UDualNodeItemDefinition* ItemDef, int32 Amount = 1);
 
-	// --- SLOT INTERAKTIONEN (SERVER) ---
+	// --- V2.2 SECURITY: SERVER RPCs WITH VALIDATION ---
 
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Inventory")
+	UFUNCTION(Server, Reliable, WithValidation, BlueprintCallable, Category="Inventory")
 	void Server_SwapSlots(int32 FromIndex, int32 ToIndex);
 
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Inventory")
+	UFUNCTION(Server, Reliable, WithValidation, BlueprintCallable, Category="Inventory")
 	void Server_DropFromSlot(int32 SlotIndex, int32 Amount);
 
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Inventory")
+	UFUNCTION(Server, Reliable, WithValidation, BlueprintCallable, Category="Inventory")
 	void Server_UseItemInSlot(int32 SlotIndex);
 
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Inventory")
+	UFUNCTION(Server, Reliable, WithValidation, BlueprintCallable, Category="Inventory")
 	void Server_TransferQuantity(int32 FromIndex, int32 ToIndex, int32 Quantity, UDualNodeInventoryComponent* TargetInventory = nullptr);
 
-	// --- SPATIAL GRID API ---
+	// --- V2.2 PERFORMANCE: SPATIAL GRID API ---
 
 	UFUNCTION(BlueprintPure, Category="Inventory|Spatial")
 	bool IsRegionFree(FIntPoint Location, FIntPoint Size, const FGuid& IgnoreInstance = FGuid()) const;
 
 	UFUNCTION(BlueprintPure, Category="Inventory|Spatial")
 	bool FindFirstFreeLocation(FIntPoint ItemSize, FIntPoint& OutLocation) const;
+
+	/** Erzwingt den Neuaufbau des Grid-Caches (wird intern automatisch verwaltet) */
+	void RebuildGridCache();
 
 	// --- GETTERS & UTILS ---
 
@@ -100,10 +111,14 @@ protected:
 	FDualNodeInventoryArray InventoryArray;
 
 private:
+	/** V2.2 Performance: Verhindert Heap-Allokationen während Grid-Kollisionsprüfungen */
+	UPROPERTY(Transient)
+	TMap<FIntPoint, FGuid> CachedOccupiedCells;
+	
+	/** Flag zur Entwertung des Caches bei Inventaränderungen */
+	bool bGridCacheDirty = true;
+
 	int32 FindStackableSlot(const UDualNodeItemDefinition* ItemDef) const;
 	int32 FindFirstEmptySlot() const;
 	void InitializeDurability(FDualNodeItemInstance& Instance, const UDualNodeItemDefinition* ItemDef);
-	
-	/** Erstellt eine Map aller belegten Grid-Zellen für die Kollisionsprüfung */
-	void GetOccupiedCells(TMap<FIntPoint, FGuid>& OutOccupiedPoints) const;
 };

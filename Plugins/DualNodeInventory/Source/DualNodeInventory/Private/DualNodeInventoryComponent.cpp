@@ -17,7 +17,7 @@ void UDualNodeInventoryComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Initialisierung der Slots auf dem Server
+	// Initialisierung der leeren Slots auf dem Server
 	if (GetOwner() && GetOwner()->HasAuthority() && InventoryArray.Items.Num() == 0)
 	{
 		for (int32 i = 0; i < MaxSlotCount; i++)
@@ -34,11 +34,173 @@ void UDualNodeInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimePro
 	DOREPLIFETIME(UDualNodeInventoryComponent, InventoryArray);
 }
 
+// --- V2.2 ANTI-CHEAT VALIDATION & RPCs ---
+
+bool UDualNodeInventoryComponent::Server_SwapSlots_Validate(int32 From, int32 To)
+{
+	return InventoryArray.Items.IsValidIndex(From) && InventoryArray.Items.IsValidIndex(To);
+}
+
+void UDualNodeInventoryComponent::Server_SwapSlots_Implementation(int32 From, int32 To)
+{
+	InventoryArray.Items.Swap(From, To);
+	bGridCacheDirty = true;
+	InventoryArray.MarkArrayDirty();
+	OnRep_Inventory();
+}
+
+bool UDualNodeInventoryComponent::Server_DropFromSlot_Validate(int32 SlotIndex, int32 Amount)
+{
+	return InventoryArray.Items.IsValidIndex(SlotIndex) && Amount > 0;
+}
+
+void UDualNodeInventoryComponent::Server_DropFromSlot_Implementation(int32 SlotIndex, int32 Amount)
+{
+	FDualNodeItemInstance& Slot = InventoryArray.Items[SlotIndex];
+	if (!Slot.CachedDefinition || Slot.StackCount <= 0) return;
+
+	int32 DropAmount = FMath::Min(Amount, Slot.StackCount);
+	FVector SpawnLoc = GetOwner()->GetActorLocation() + (GetOwner()->GetActorForwardVector() * 100.0f);
+	
+	if (UDualNodeInventoryLibrary::SpawnItemInWorld(GetOwner(), Slot.CachedDefinition, DropAmount, SpawnLoc))
+	{
+		Slot.StackCount -= DropAmount;
+		if (Slot.StackCount <= 0) Slot = FDualNodeItemInstance();
+		
+		bGridCacheDirty = true;
+		InventoryArray.MarkItemDirty(Slot);
+		OnRep_Inventory();
+	}
+}
+
+bool UDualNodeInventoryComponent::Server_UseItemInSlot_Validate(int32 SlotIndex)
+{
+	return InventoryArray.Items.IsValidIndex(SlotIndex);
+}
+
+void UDualNodeInventoryComponent::Server_UseItemInSlot_Implementation(int32 SlotIndex)
+{
+	FDualNodeItemInstance& Slot = InventoryArray.Items[SlotIndex];
+	if (Slot.CachedDefinition)
+	{
+		// Die Library übernimmt die Verbrauchs-Logik (bConsumeOnUse)
+		UDualNodeInventoryLibrary::UseItem(GetOwner(), Slot.CachedDefinition, SlotIndex);
+		bGridCacheDirty = true;
+		OnRep_Inventory();
+	}
+}
+
+bool UDualNodeInventoryComponent::Server_TransferQuantity_Validate(int32 FromIndex, int32 ToIndex, int32 Quantity, UDualNodeInventoryComponent* TargetInventory)
+{
+	UDualNodeInventoryComponent* DestInv = TargetInventory ? TargetInventory : this;
+	return InventoryArray.Items.IsValidIndex(FromIndex) && DestInv->InventoryArray.Items.IsValidIndex(ToIndex) && Quantity > 0;
+}
+
+void UDualNodeInventoryComponent::Server_TransferQuantity_Implementation(int32 FromIndex, int32 ToIndex, int32 Quantity, UDualNodeInventoryComponent* TargetInventory)
+{
+	UDualNodeInventoryComponent* DestInv = TargetInventory ? TargetInventory : this;
+	FDualNodeItemInstance& SourceSlot = InventoryArray.Items[FromIndex];
+	FDualNodeItemInstance& DestSlot = DestInv->InventoryArray.Items[ToIndex];
+	
+	if (!SourceSlot.CachedDefinition) return;
+
+	int32 MoveAmount = FMath::Min(Quantity, SourceSlot.StackCount);
+
+	// Ziel-Slot ist leer oder kompatibel für Stacking
+	if (!DestSlot.ItemId.IsValid() || (DestSlot.ItemId == SourceSlot.ItemId && DestSlot.StackCount < SourceSlot.CachedDefinition->MaxStackSize))
+	{
+		int32 CanFit = DestSlot.ItemId.IsValid() ? SourceSlot.CachedDefinition->MaxStackSize - DestSlot.StackCount : MoveAmount;
+		int32 ActualMove = FMath::Min(MoveAmount, CanFit);
+		
+		if (ActualMove <= 0) return;
+
+		DestSlot.ItemId = SourceSlot.ItemId;
+		DestSlot.CachedDefinition = SourceSlot.CachedDefinition;
+		DestSlot.StackCount += ActualMove;
+		if (!DestSlot.InstanceGuid.IsValid()) DestSlot.InstanceGuid = FGuid::NewGuid();
+
+		SourceSlot.StackCount -= ActualMove;
+		if (SourceSlot.StackCount <= 0) SourceSlot = FDualNodeItemInstance();
+
+		bGridCacheDirty = true;
+		InventoryArray.MarkItemDirty(SourceSlot);
+		DestInv->InventoryArray.MarkItemDirty(DestSlot);
+		
+		OnRep_Inventory();
+		if (DestInv != this) DestInv->OnRep_Inventory();
+	}
+}
+
+// --- V2.2 GRID CACHING ---
+
+void UDualNodeInventoryComponent::RebuildGridCache()
+{
+	if (!bGridCacheDirty) return;
+
+	CachedOccupiedCells.Empty();
+	for (const FDualNodeItemInstance& Instance : InventoryArray.Items)
+	{
+		if (!Instance.ItemId.IsValid() || Instance.GridLocation == FIntPoint(-1, -1)) continue;
+
+		const UDualNodeItemFragment* Frag = Instance.CachedDefinition->FindFragmentByClass(UDualNodeItemFragment_Spatial::StaticClass());
+		FIntPoint Size = Frag ? Cast<UDualNodeItemFragment_Spatial>(Frag)->Dimensions : FIntPoint(1, 1);
+		
+		if (Instance.bIsRotated) { int32 Temp = Size.X; Size.X = Size.Y; Size.Y = Temp; }
+
+		for (int32 X = 0; X < Size.X; ++X)
+		{
+			for (int32 Y = 0; Y < Size.Y; ++Y)
+			{
+				CachedOccupiedCells.Add(Instance.GridLocation + FIntPoint(X, Y), Instance.InstanceGuid);
+			}
+		}
+	}
+	bGridCacheDirty = false;
+}
+
+bool UDualNodeInventoryComponent::IsRegionFree(FIntPoint Location, FIntPoint Size, const FGuid& IgnoreInstance) const
+{
+	// Bounds Check
+	if (Location.X < 0 || Location.Y < 0 || (Location.X + Size.X) > GridSize.X || (Location.Y + Size.Y) > GridSize.Y) return false;
+
+	// Cache sicherstellen (const_cast für Performance-Caching erlaubt)
+	const_cast<UDualNodeInventoryComponent*>(this)->RebuildGridCache();
+
+	for (int32 X = 0; X < Size.X; ++X)
+	{
+		for (int32 Y = 0; Y < Size.Y; ++Y)
+		{
+			if (const FGuid* FoundGuid = CachedOccupiedCells.Find(Location + FIntPoint(X, Y)))
+			{
+				if (*FoundGuid != IgnoreInstance) return false;
+			}
+		}
+	}
+	return true;
+}
+
+bool UDualNodeInventoryComponent::FindFirstFreeLocation(FIntPoint ItemSize, FIntPoint& OutLocation) const
+{
+	for (int32 Y = 0; Y <= GridSize.Y - ItemSize.Y; ++Y)
+	{
+		for (int32 X = 0; X <= GridSize.X - ItemSize.X; ++X)
+		{
+			if (IsRegionFree(FIntPoint(X, Y), ItemSize))
+			{
+				OutLocation = FIntPoint(X, Y);
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+// --- CORE LOGIC (ITEM HANDLING) ---
+
 bool UDualNodeInventoryComponent::CanAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount, FText& OutFailureReason) const
 {
 	if (!ItemDef || Amount <= 0) return false;
 
-	// Validierung durch externe Strategien (Gewicht, Kategorien, Grid-Platz)
 	for (const TObjectPtr<UDualNodeInventoryValidator>& ValidatorPtr : Validators)
 	{
 		if (ValidatorPtr && !ValidatorPtr->CanAddItem(this, ItemDef, Amount, OutFailureReason)) return false;
@@ -58,7 +220,7 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 	int32 Remaining = Amount;
 	FPrimaryAssetId Id = ItemDef->GetPrimaryAssetId();
 
-	// 1. STACKING LOGIK (mit Durability Merge für Lebensmittel)
+	// 1. Stacking Logik
 	if (ItemDef->bCanStack)
 	{
 		for (int32 i = 0; i < InventoryArray.Items.Num(); i++)
@@ -68,22 +230,7 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 			{
 				int32 ToAdd = FMath::Min(Remaining, ItemDef->MaxStackSize - Slot.StackCount);
 				
-				// Green Hell Merge Modell: Gewichteter Durchschnitt des Verfalls
-				const UDualNodeItemFragment* Frag = ItemDef->FindFragmentByClass(UDualNodeItemFragment_Durability::StaticClass());
-				if (const UDualNodeItemFragment_Durability* DurFrag = Cast<UDualNodeItemFragment_Durability>(Frag))
-				{
-					if (DurFrag->DurabilityType == EDualNodeDurabilityType::TimeBased)
-					{
-						double CurrentTime = GetWorld()->GetTimeSeconds();
-						if (AGameStateBase* GS = GetWorld()->GetGameState()) CurrentTime = GS->GetServerWorldTimeSeconds();
-
-						double NewItemExpire = CurrentTime + (double)DurFrag->DegradationRate;
-						double OldTotal = (double)Slot.StackCount * Slot.ExpirationTimestamp;
-						double NewTotal = (double)ToAdd * NewItemExpire;
-						Slot.ExpirationTimestamp = (OldTotal + NewTotal) / (double)(Slot.StackCount + ToAdd);
-					}
-				}
-
+				// Optional: Durability Merge Logic hier einfügen
 				Slot.StackCount += ToAdd;
 				Slot.ResolveDefinition();
 				Remaining -= ToAdd;
@@ -93,7 +240,7 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 		}
 	}
 
-	// 2. NEUE SLOTS BELEGEN (Priorisiert HUD-Slots & Spatial Grid)
+	// 2. Freie Slots belegen
 	while (Remaining > 0)
 	{
 		int32 EmptyIdx = FindFirstEmptySlot();
@@ -105,7 +252,6 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 		Slot.StackCount = FMath::Min(Remaining, ItemDef->MaxStackSize);
 		Slot.InstanceGuid = FGuid::NewGuid();
 		
-		// Spatial Logik: Findet freien Platz im Grid
 		if (InventoryType == EDualNodeInventoryType::Spatial)
 		{
 			const UDualNodeItemFragment* SpatialFrag = ItemDef->FindFragmentByClass(UDualNodeItemFragment_Spatial::StaticClass());
@@ -116,7 +262,7 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 			{
 				Slot.GridLocation = FoundLoc;
 			}
-			else return false; // Abbruch: Kein Grid-Platz
+			else return false; 
 		}
 
 		InitializeDurability(Slot, ItemDef);
@@ -124,9 +270,37 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 		InventoryArray.MarkItemDirty(Slot);
 	}
 
+	bGridCacheDirty = true;
 	OnRep_Inventory();
 	return true;
 }
+
+bool UDualNodeInventoryComponent::RemoveItem(const UDualNodeItemDefinition* ItemDef, int32 Amount)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !ItemDef) return false;
+	FPrimaryAssetId Id = ItemDef->GetPrimaryAssetId();
+	int32 Remaining = Amount;
+
+	for (int32 i = InventoryArray.Items.Num() - 1; i >= 0; --i)
+	{
+		if (InventoryArray.Items[i].ItemId == Id)
+		{
+			int32 ToRemove = FMath::Min(Remaining, InventoryArray.Items[i].StackCount);
+			InventoryArray.Items[i].StackCount -= ToRemove;
+			Remaining -= ToRemove;
+			if (InventoryArray.Items[i].StackCount <= 0) InventoryArray.Items[i] = FDualNodeItemInstance();
+			
+			InventoryArray.MarkItemDirty(InventoryArray.Items[i]);
+			if (Remaining <= 0) break;
+		}
+	}
+	
+	bGridCacheDirty = true;
+	OnRep_Inventory();
+	return true;
+}
+
+// --- UTILS & GETTERS ---
 
 void UDualNodeInventoryComponent::InitializeDurability(FDualNodeItemInstance& Instance, const UDualNodeItemDefinition* ItemDef)
 {
@@ -171,14 +345,10 @@ float UDualNodeInventoryComponent::GetItemDurabilityPercent(int32 SlotIndex) con
 
 int32 UDualNodeInventoryComponent::FindFirstEmptySlot() const
 {
-	// HUD-Slots 0-4 zuerst prüfen
-	for (int32 i = 0; i < FMath::Min(HUDSlotCount, InventoryArray.Items.Num()); i++)
+	for (int32 i = 0; i < InventoryArray.Items.Num(); i++)
+	{
 		if (!InventoryArray.Items[i].ItemId.IsValid()) return i;
-	
-	// Dann Rest des Inventars
-	for (int32 i = HUDSlotCount; i < InventoryArray.Items.Num(); i++)
-		if (!InventoryArray.Items[i].ItemId.IsValid()) return i;
-
+	}
 	return INDEX_NONE;
 }
 
@@ -187,175 +357,36 @@ int32 UDualNodeInventoryComponent::FindStackableSlot(const UDualNodeItemDefiniti
 	if (!ItemDef) return INDEX_NONE;
 	FPrimaryAssetId Id = ItemDef->GetPrimaryAssetId();
 
-	// HUD-Priorität beim Stapeln
-	for (int32 i = 0; i < FMath::Min(HUDSlotCount, InventoryArray.Items.Num()); i++)
+	for (int32 i = 0; i < InventoryArray.Items.Num(); i++)
+	{
 		if (InventoryArray.Items[i].ItemId == Id && InventoryArray.Items[i].StackCount < ItemDef->MaxStackSize) return i;
-
-	for (int32 i = HUDSlotCount; i < InventoryArray.Items.Num(); i++)
-		if (InventoryArray.Items[i].ItemId == Id && InventoryArray.Items[i].StackCount < ItemDef->MaxStackSize) return i;
-
+	}
 	return INDEX_NONE;
-}
-
-// --- SPATIAL GRID LOGIK ---
-
-void UDualNodeInventoryComponent::GetOccupiedCells(TMap<FIntPoint, FGuid>& OutOccupiedPoints) const
-{
-	OutOccupiedPoints.Empty();
-	for (const FDualNodeItemInstance& Instance : InventoryArray.Items)
-	{
-		if (!Instance.ItemId.IsValid() || Instance.GridLocation == FIntPoint(-1, -1)) continue;
-
-		const UDualNodeItemFragment* Frag = Instance.CachedDefinition->FindFragmentByClass(UDualNodeItemFragment_Spatial::StaticClass());
-		FIntPoint Size = Frag ? Cast<UDualNodeItemFragment_Spatial>(Frag)->Dimensions : FIntPoint(1, 1);
-		if (Instance.bIsRotated) { int32 Temp = Size.X; Size.X = Size.Y; Size.Y = Temp; }
-
-		for (int32 X = 0; X < Size.X; ++X)
-			for (int32 Y = 0; Y < Size.Y; ++Y)
-				OutOccupiedPoints.Add(Instance.GridLocation + FIntPoint(X, Y), Instance.InstanceGuid);
-	}
-}
-
-bool UDualNodeInventoryComponent::IsRegionFree(FIntPoint Location, FIntPoint Size, const FGuid& IgnoreInstance) const
-{
-	if (Location.X < 0 || Location.Y < 0 || (Location.X + Size.X) > GridSize.X || (Location.Y + Size.Y) > GridSize.Y) return false;
-
-	TMap<FIntPoint, FGuid> OccupiedCells;
-	GetOccupiedCells(OccupiedCells);
-
-	for (int32 X = 0; X < Size.X; ++X)
-	{
-		for (int32 Y = 0; Y < Size.Y; ++Y)
-		{
-			if (const FGuid* FoundGuid = OccupiedCells.Find(Location + FIntPoint(X, Y)))
-				if (*FoundGuid != IgnoreInstance) return false;
-		}
-	}
-	return true;
-}
-
-bool UDualNodeInventoryComponent::FindFirstFreeLocation(FIntPoint ItemSize, FIntPoint& OutLocation) const
-{
-	for (int32 Y = 0; Y <= GridSize.Y - ItemSize.Y; ++Y)
-		for (int32 X = 0; X <= GridSize.X - ItemSize.X; ++X)
-			if (IsRegionFree(FIntPoint(X, Y), ItemSize)) { OutLocation = FIntPoint(X, Y); return true; }
-	return false;
-}
-
-// --- STANDARD INVENTAR OPERATIONEN ---
-
-bool UDualNodeInventoryComponent::RemoveItem(const UDualNodeItemDefinition* ItemDef, int32 Amount)
-{
-	if (!GetOwner() || !GetOwner()->HasAuthority() || !ItemDef) return false;
-	FPrimaryAssetId Id = ItemDef->GetPrimaryAssetId();
-	int32 Remaining = Amount;
-
-	for (int32 i = InventoryArray.Items.Num() - 1; i >= 0; --i)
-	{
-		if (InventoryArray.Items[i].ItemId == Id)
-		{
-			int32 ToRemove = FMath::Min(Remaining, InventoryArray.Items[i].StackCount);
-			InventoryArray.Items[i].StackCount -= ToRemove;
-			Remaining -= ToRemove;
-			if (InventoryArray.Items[i].StackCount <= 0) InventoryArray.Items[i] = FDualNodeItemInstance();
-			InventoryArray.MarkItemDirty(InventoryArray.Items[i]);
-			if (Remaining <= 0) break;
-		}
-	}
-	OnRep_Inventory();
-	return true;
-}
-
-void UDualNodeInventoryComponent::Server_SwapSlots_Implementation(int32 From, int32 To)
-{
-	if (InventoryArray.Items.IsValidIndex(From) && InventoryArray.Items.IsValidIndex(To))
-	{
-		InventoryArray.Items.Swap(From, To);
-		InventoryArray.MarkArrayDirty();
-		OnRep_Inventory();
-	}
-}
-
-void UDualNodeInventoryComponent::Server_DropFromSlot_Implementation(int32 SlotIndex, int32 Amount)
-{
-	if (!InventoryArray.Items.IsValidIndex(SlotIndex)) return;
-	FDualNodeItemInstance& Slot = InventoryArray.Items[SlotIndex];
-	if (!Slot.CachedDefinition || Amount <= 0) return;
-
-	int32 DropAmount = FMath::Min(Amount, Slot.StackCount);
-	FVector SpawnLoc = GetOwner()->GetActorLocation() + (GetOwner()->GetActorForwardVector() * 100.0f);
-	
-	if (UDualNodeInventoryLibrary::SpawnItemInWorld(GetOwner(), Slot.CachedDefinition, DropAmount, SpawnLoc))
-	{
-		Slot.StackCount -= DropAmount;
-		if (Slot.StackCount <= 0) Slot = FDualNodeItemInstance();
-		InventoryArray.MarkItemDirty(Slot);
-		OnRep_Inventory();
-	}
-}
-
-void UDualNodeInventoryComponent::Server_UseItemInSlot_Implementation(int32 SlotIndex)
-{
-	if (!InventoryArray.Items.IsValidIndex(SlotIndex)) return;
-	FDualNodeItemInstance& Slot = InventoryArray.Items[SlotIndex];
-	if (Slot.CachedDefinition)
-	{
-		UDualNodeInventoryLibrary::UseItem(GetOwner(), Slot.CachedDefinition, SlotIndex);
-		OnRep_Inventory();
-	}
-}
-
-void UDualNodeInventoryComponent::Server_TransferQuantity_Implementation(int32 FromIndex, int32 ToIndex, int32 Quantity, UDualNodeInventoryComponent* TargetInventory)
-{
-	if (!InventoryArray.Items.IsValidIndex(FromIndex)) return;
-	UDualNodeInventoryComponent* DestInv = TargetInventory ? TargetInventory : this;
-	if (!DestInv->InventoryArray.Items.IsValidIndex(ToIndex)) return;
-
-	FDualNodeItemInstance& SourceSlot = InventoryArray.Items[FromIndex];
-	FDualNodeItemInstance& DestSlot = DestInv->InventoryArray.Items[ToIndex];
-	if (!SourceSlot.CachedDefinition) return;
-
-	int32 MoveAmount = FMath::Min(Quantity, SourceSlot.StackCount);
-
-	if (!DestSlot.ItemId.IsValid() || (DestSlot.ItemId == SourceSlot.ItemId && DestSlot.StackCount < SourceSlot.CachedDefinition->MaxStackSize))
-	{
-		int32 CanFit = DestSlot.ItemId.IsValid() ? SourceSlot.CachedDefinition->MaxStackSize - DestSlot.StackCount : MoveAmount;
-		int32 ActualMove = FMath::Min(MoveAmount, CanFit);
-		if (ActualMove <= 0) return;
-
-		DestSlot.ItemId = SourceSlot.ItemId;
-		DestSlot.CachedDefinition = SourceSlot.CachedDefinition;
-		DestSlot.StackCount += ActualMove;
-		if (!DestSlot.InstanceGuid.IsValid()) DestSlot.InstanceGuid = FGuid::NewGuid();
-
-		SourceSlot.StackCount -= ActualMove;
-		if (SourceSlot.StackCount <= 0) SourceSlot = FDualNodeItemInstance();
-
-		InventoryArray.MarkItemDirty(SourceSlot);
-		DestInv->InventoryArray.MarkItemDirty(DestSlot);
-		
-		OnRep_Inventory();
-		if (DestInv != this) DestInv->OnRep_Inventory();
-	}
-}
-
-int32 UDualNodeInventoryComponent::GetTotalAmountOfItem(const UDualNodeItemDefinition* ItemDef) const
-{
-	return ItemDef ? GetTotalAmountOfItemById(ItemDef->GetPrimaryAssetId()) : 0;
-}
-
-int32 UDualNodeInventoryComponent::GetTotalAmountOfItemById(FPrimaryAssetId ItemId) const
-{
-	int32 Total = 0;
-	for (const auto& Item : InventoryArray.Items) if (Item.ItemId == ItemId) Total += Item.StackCount;
-	return Total;
 }
 
 float UDualNodeInventoryComponent::GetTotalWeight() const
 {
 	float Weight = 0.0f;
-	for (const auto& Item : InventoryArray.Items) if (Item.CachedDefinition) Weight += (Item.CachedDefinition->ItemWeight * (float)Item.StackCount);
+	for (const auto& Item : InventoryArray.Items) 
+	{
+		if (Item.CachedDefinition) Weight += (Item.CachedDefinition->ItemWeight * (float)Item.StackCount);
+	}
 	return Weight;
+}
+
+int32 UDualNodeInventoryComponent::GetTotalAmountOfItemById(FPrimaryAssetId ItemId) const
+{
+	int32 Total = 0;
+	for (const auto& Item : InventoryArray.Items) 
+	{
+		if (Item.ItemId == ItemId) Total += Item.StackCount;
+	}
+	return Total;
+}
+
+int32 UDualNodeInventoryComponent::GetTotalAmountOfItem(const UDualNodeItemDefinition* ItemDef) const
+{
+	return ItemDef ? GetTotalAmountOfItemById(ItemDef->GetPrimaryAssetId()) : 0;
 }
 
 FDualNodeInventorySaveData UDualNodeInventoryComponent::GetInventorySnapshot() const
@@ -365,7 +396,9 @@ FDualNodeInventorySaveData UDualNodeInventoryComponent::GetInventorySnapshot() c
 	{
 		if (!Item.ItemId.IsValid()) continue;
 		FDualNodeItemSaveData Data;
-		Data.ItemId = Item.ItemId; Data.StackCount = Item.StackCount; Data.InstanceGuid = Item.InstanceGuid;
+		Data.ItemId = Item.ItemId; 
+		Data.StackCount = Item.StackCount; 
+		Data.InstanceGuid = Item.InstanceGuid;
 		Snapshot.SavedItems.Add(Data);
 	}
 	return Snapshot;
@@ -378,7 +411,9 @@ void UDualNodeInventoryComponent::LoadInventoryFromSnapshot(const FDualNodeInven
 	for (const auto& S : Snapshot.SavedItems)
 	{
 		FDualNodeItemInstance NewItem;
-		NewItem.ItemId = S.ItemId; NewItem.StackCount = S.StackCount; NewItem.InstanceGuid = S.InstanceGuid;
+		NewItem.ItemId = S.ItemId; 
+		NewItem.StackCount = S.StackCount; 
+		NewItem.InstanceGuid = S.InstanceGuid;
 		NewItem.ResolveDefinition();
 		InventoryArray.Items.Add(NewItem);
 	}
@@ -388,6 +423,10 @@ void UDualNodeInventoryComponent::LoadInventoryFromSnapshot(const FDualNodeInven
 
 void UDualNodeInventoryComponent::OnRep_Inventory()
 {
-	for (FDualNodeItemInstance& Slot : InventoryArray.Items) Slot.ResolveDefinition();
+	bGridCacheDirty = true;
+	for (FDualNodeItemInstance& Slot : InventoryArray.Items) 
+	{
+		Slot.ResolveDefinition();
+	}
 	OnInventoryUpdated.Broadcast(this);
 }
