@@ -17,13 +17,28 @@ struct FDualNodeItemInstance : public FFastArraySerializerItem
 	UPROPERTY(BlueprintReadOnly, Category = "Item")
 	int32 StackCount = 0;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Item", meta = (IgnoreForMemberInitializationTest))
+	UPROPERTY(BlueprintReadOnly, Category = "Item")
 	FGuid InstanceGuid;
 
 	UPROPERTY(BlueprintReadWrite, Category = "Item")
 	FGameplayTagContainer DynamicTags;
 
-	/** FIX: 'const' entfernt, damit UHT den Pin im Blueprint-Break-Node anzeigt */
+	// --- V2.0 DYNAMIC DATA ---
+
+	/** Aktuelle Haltbarkeit (für Use-Based Items) */
+	UPROPERTY(BlueprintReadWrite, Category = "Item|Durability")
+	float CurrentDurability = 0.0f;
+
+	/** Zeitpunkt des vollständigen Verfalls (Server-Time) */
+	UPROPERTY(BlueprintReadWrite, Category = "Item|Durability")
+	double ExpirationTimestamp = 0.0;
+
+	/** Ankerpunkt im Grid (nur im Spatial-Modus relevant) */
+	UPROPERTY(BlueprintReadWrite, Category = "Item|Spatial")
+	FIntPoint GridLocation = FIntPoint(-1, -1);
+
+	// --- CACHING ---
+
 	UPROPERTY(NotReplicated, BlueprintReadOnly, Category = "Item")
 	TObjectPtr<UDualNodeItemDefinition> CachedDefinition = nullptr;
 

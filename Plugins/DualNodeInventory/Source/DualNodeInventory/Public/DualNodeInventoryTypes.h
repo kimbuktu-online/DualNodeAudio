@@ -4,6 +4,23 @@
 #include "Engine/DataAsset.h"
 #include "DualNodeInventoryTypes.generated.h"
 
+/** Bestimmt, wie das Inventar intern validiert und im UI dargestellt wird */
+UENUM(BlueprintType)
+enum class EDualNodeInventoryType : uint8
+{
+	Classic UMETA(DisplayName = "Classic (Slot-based)"),
+	Spatial UMETA(DisplayName = "Spatial (Grid-based)")
+};
+
+/** Bestimmt die Art des Verfalls für Items */
+UENUM(BlueprintType)
+enum class EDualNodeDurabilityType : uint8
+{
+	None,
+	UseBased   UMETA(DisplayName = "Abnutzung bei Benutzung (z.B. Werkzeug)"),
+	TimeBased  UMETA(DisplayName = "Zeitbasierter Verfall (z.B. Lebensmittel)")
+};
+
 UENUM(BlueprintType)
 enum class EDualNodeMainCategory : uint8
 {
@@ -13,6 +30,7 @@ enum class EDualNodeMainCategory : uint8
 	Consumables,
 	QuestItems
 };
+
 
 UENUM(BlueprintType)
 enum class EDualNodeResourceSubCategory : uint8

@@ -23,11 +23,19 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="Inventory")
 	FOnInventoryUpdated OnInventoryUpdated;
 	
+	/** V2.0: Bestimmt das Verhalten des Inventars (Classic vs. Spatial) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory|Config")
+	EDualNodeInventoryType InventoryType = EDualNodeInventoryType::Classic;
+
 	UPROPERTY(EditAnywhere, Instanced, Category="Inventory|Config")
 	TArray<TObjectPtr<UDualNodeInventoryValidator>> Validators;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory|Config")
 	int32 MaxSlotCount = 20;
+
+	/** V2.0: Anzahl der Slots, die als HUD/Hotbar priorisiert werden (Standard: 0-4) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory|Config")
+	int32 HUDSlotCount = 5;
 
 	UFUNCTION(BlueprintPure, Category="Inventory")
 	bool CanAddItem(const UDualNodeItemDefinition* ItemDef, int32 Amount, FText& OutFailureReason) const;
@@ -49,27 +57,20 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Inventory")
 	void Server_UseItemInSlot(int32 SlotIndex);
 
-	/** Verschiebt eine Menge zwischen Slots oder Inventaren (für Quick Move & Split) */
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category="Inventory")
 	void Server_TransferQuantity(int32 FromIndex, int32 ToIndex, int32 Quantity, UDualNodeInventoryComponent* TargetInventory = nullptr);
+
+	// --- V2.0 HELPER ---
+
+	/** Berechnet die verbleibende Haltbarkeit eines Items in Prozent (0.0 - 1.0) */
+	UFUNCTION(BlueprintPure, Category="Inventory|Durability")
+	float GetItemDurabilityPercent(int32 SlotIndex) const;
 
 	UFUNCTION(BlueprintPure, Category="Inventory")
 	float GetTotalWeight() const;
 
 	UFUNCTION(BlueprintPure, Category="Inventory")
 	int32 GetTotalAmountOfItem(const UDualNodeItemDefinition* ItemDef) const;
-
-	UFUNCTION(BlueprintPure, Category="Inventory")
-	int32 GetTotalAmountOfItemById(FPrimaryAssetId ItemId) const;
-
-	UFUNCTION(BlueprintCallable, Category="Inventory|Persistence")
-	FDualNodeInventorySaveData GetInventorySnapshot() const;
-
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Inventory|Persistence")
-	void LoadInventoryFromSnapshot(const FDualNodeInventorySaveData& Snapshot);
-
-	UFUNCTION(BlueprintPure, Category = "Inventory")
-	const TArray<FDualNodeItemInstance>& GetItems() const { return InventoryArray.Items; }
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void OnRep_Inventory();
@@ -79,6 +80,12 @@ protected:
 	FDualNodeInventoryArray InventoryArray;
 
 private:
+	/** V2.0: Sucht Stackable Slots mit Priorität auf HUD-Bereich */
 	int32 FindStackableSlot(const UDualNodeItemDefinition* ItemDef) const;
+	
+	/** V2.0: Sucht freien Slot mit Priorität auf HUD-Bereich */
 	int32 FindFirstEmptySlot() const;
+
+	/** V2.0: Initialisiert die Haltbarkeit für eine neue Instanz */
+	void InitializeDurability(FDualNodeItemInstance& Instance, const UDualNodeItemDefinition* ItemDef);
 };
