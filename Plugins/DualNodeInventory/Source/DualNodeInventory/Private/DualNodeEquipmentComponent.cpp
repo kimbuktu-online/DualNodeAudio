@@ -26,10 +26,10 @@ void UDualNodeEquipmentComponent::EquipItem(const UDualNodeItemDefinition* ItemD
 	if (!ParentMesh) return;
 
 	// 2. FALL A: Skinned Mesh (Rüstung/Kleidung)
-	if (EquipFrag->EquipmentMesh)
+	if (EquipFrag->EquipmentMesh != nullptr)
 	{
 		USkeletalMeshComponent* NewComp = NewObject<USkeletalMeshComponent>(GetOwner());
-		NewComp->SetSkeletalMesh(EquipFrag->EquipmentMesh);
+		NewComp->SetSkeletalMesh(EquipFrag->EquipmentMesh.Get());
 		NewComp->SetupAttachment(ParentMesh);
 		
 		// Synchronisation mit dem Haupt-Mesh (Wichtig für Animationen)
@@ -40,10 +40,10 @@ void UDualNodeEquipmentComponent::EquipItem(const UDualNodeItemDefinition* ItemD
 	}
 	
 	// 3. FALL B: Statisches Mesh (Waffen/Werkzeuge am Socket)
-	else if (EquipFrag->StaticMesh)
+	else if (EquipFrag->StaticMesh != nullptr)
 	{
 		UStaticMeshComponent* NewWeapon = NewObject<UStaticMeshComponent>(GetOwner());
-		NewWeapon->SetStaticMesh(EquipFrag->StaticMesh);
+		NewWeapon->SetStaticMesh(EquipFrag->StaticMesh.Get());
 		NewWeapon->SetupAttachment(ParentMesh, EquipFrag->AttachmentSocket);
 		NewWeapon->RegisterComponent();
 		

@@ -1,18 +1,20 @@
 ﻿#include "DualNodeInventorySubsystem.h"
 #include "DualNodeInventoryComponent.h"
-#include "EngineUtils.h"
+#include "UObject/UObjectIterator.h"
 
 TArray<UDualNodeInventoryComponent*> UDualNodeInventorySubsystem::GetAllInventoriesWithItem(FPrimaryAssetId ItemId)
 {
 	TArray<UDualNodeInventoryComponent*> FoundInventories;
-	for (TObjectIterator<UDualNodeInventoryComponent> It; It; ++It)
+
+	// Moderne und sicherere Methode, um über alle Instanzen einer Klasse zu iterieren.
+	for (UDualNodeInventoryComponent* Inventory : TObjectRange<UDualNodeInventoryComponent>())
 	{
-		// Sicherstellen, dass die Komponente zur aktuellen Welt gehört
-		if (It->GetWorld() == GetWorld())
+		// Sicherstellen, dass die Komponente gültig ist und zur aktuellen Welt gehört
+		if (Inventory && Inventory->GetWorld() == GetWorld())
 		{
-			if (It->GetTotalAmountOfItemById(ItemId) > 0)
+			if (Inventory->GetTotalAmountOfItemById(ItemId) > 0)
 			{
-				FoundInventories.Add(*It);
+				FoundInventories.Add(Inventory);
 			}
 		}
 	}

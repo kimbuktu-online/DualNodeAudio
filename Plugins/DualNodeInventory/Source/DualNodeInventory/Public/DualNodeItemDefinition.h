@@ -7,6 +7,8 @@
 #include "DualNodeInventoryTypes.h"
 #include "DualNodeItemDefinition.generated.h"
 
+class UTexture2D;
+
 /**
  * DNA 2.2 - System-Definition für Inventar-Gegenstände.
  * Erweitert um asynchrones Asset-Loading und logische Abfragen via Gameplay Tags.

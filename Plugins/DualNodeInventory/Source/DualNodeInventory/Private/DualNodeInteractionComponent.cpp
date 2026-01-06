@@ -3,6 +3,8 @@
 #include "DualNodeInventorySettings.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "Engine/World.h"
+#include "Engine/EngineTypes.h"
 
 UDualNodeInteractionComponent::UDualNodeInteractionComponent()
 {

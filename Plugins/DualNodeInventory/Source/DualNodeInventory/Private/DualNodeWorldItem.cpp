@@ -1,4 +1,5 @@
 ﻿#include "DualNodeWorldItem.h"
+#include "Components/StaticMeshComponent.h"
 #include "DualNodeInventoryComponent.h"
 #include "DualNodeItemDefinition.h"
 #include "DualNodeItemFragment_Mesh.h"

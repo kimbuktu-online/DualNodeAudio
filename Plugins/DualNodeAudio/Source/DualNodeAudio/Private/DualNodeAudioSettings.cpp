@@ -9,7 +9,7 @@ const FString DNA_PROJECT_ROOT = TEXT("/Game/DualNode/Audio/Defaults/");
 UDualNodeAudioSettings::UDualNodeAudioSettings(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	CategoryName = TEXT("Game");
+	CategoryName = TEXT("Plugins");
 	SectionName = TEXT("Dual Node Audio");
 
 	bWarnOnMissingTags = true;
@@ -58,6 +58,6 @@ FText UDualNodeAudioSettings::GetSectionText() const
 
 FName UDualNodeAudioSettings::GetCategoryName() const
 {
-	return TEXT("Game");
+	return TEXT("Plugins");
 }
 #endif

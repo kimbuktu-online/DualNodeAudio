@@ -8,6 +8,7 @@
 #include "GameplayTagAssetInterface.h"
 #include "Kismet/GameplayStatics.h"
 #include "Algo/Sort.h"
+#include "Engine/World.h"
 
 UDualNodeInventoryComponent* UDualNodeInventoryLibrary::GetInventoryComponent(AActor* Target)
 {

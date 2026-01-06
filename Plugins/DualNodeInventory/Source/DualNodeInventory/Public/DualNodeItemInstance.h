@@ -17,7 +17,8 @@ struct FDualNodeItemInstance : public FFastArraySerializerItem
 	UPROPERTY(BlueprintReadOnly, Category = "Item")
 	int32 StackCount = 0;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Item")
+	// Diese GUID ist transient und wird zur Laufzeit zugewiesen. Sie wird für den Initialisierungs-Check ignoriert.
+	UPROPERTY(BlueprintReadOnly, Category = "Item", Transient, meta=(IgnoreForMemberInitializationTest))
 	FGuid InstanceGuid;
 
 	UPROPERTY(BlueprintReadWrite, Category = "Item")

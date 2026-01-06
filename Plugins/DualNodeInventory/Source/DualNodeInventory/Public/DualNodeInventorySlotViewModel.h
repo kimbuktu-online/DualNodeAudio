@@ -6,6 +6,8 @@
 #include "Engine/StreamableManager.h"
 #include "DualNodeInventorySlotViewModel.generated.h"
 
+class UTexture2D;
+
 /**
  * DNA 2.2 - Slot ViewModel mit Unterstützung für asynchrones Icon-Loading.
  */

@@ -175,21 +175,33 @@ bool UDualNodeInventoryComponent::TryAddItem(const UDualNodeItemDefinition* Item
 
 void UDualNodeInventoryComponent::Server_DropFromSlot_Implementation(int32 SlotIndex, int32 Amount)
 {
-	FDualNodeItemInstance& Slot = InventoryArray.Items[SlotIndex];
-	if (!Slot.CachedDefinition || Slot.StackCount <= 0) return;
+    FDualNodeItemInstance& Slot = InventoryArray.Items[SlotIndex];
+    if (!Slot.CachedDefinition || Slot.StackCount <= 0) return;
 
-	int32 DropAmount = FMath::Min(Amount, Slot.StackCount);
-	float DropDist = UDualNodeInventorySettings::Get()->ItemDropForwardOffset;
-	FVector SpawnLoc = GetOwner()->GetActorLocation() + (GetOwner()->GetActorForwardVector() * DropDist);
-	
-	if (UDualNodeInventoryLibrary::SpawnItemInWorld(GetOwner(), Slot.CachedDefinition, DropAmount, SpawnLoc))
-	{
-		Slot.StackCount -= DropAmount;
-		if (Slot.StackCount <= 0) Slot = FDualNodeItemInstance();
-		bGridCacheDirty = true;
-		InventoryArray.MarkItemDirty(Slot);
-		OnRep_Inventory();
-	}
+    int32 DropAmount = FMath::Min(Amount, Slot.StackCount);
+    float DropDist = UDualNodeInventorySettings::Get()->ItemDropForwardOffset;
+    FVector SpawnLoc = GetOwner()->GetActorLocation() + (GetOwner()->GetActorForwardVector() * DropDist);
+    
+    if (UDualNodeInventoryLibrary::SpawnItemInWorld(GetOwner(), Slot.CachedDefinition, DropAmount, SpawnLoc))
+    {
+        Slot.StackCount -= DropAmount;
+        if (Slot.StackCount <= 0)
+        {
+            // Slot leeren, anstatt eine neue Instanz zuzuweisen
+            Slot.ItemId = FPrimaryAssetId();
+            Slot.CachedDefinition = nullptr;
+            Slot.StackCount = 0;
+            Slot.InstanceGuid.Invalidate();
+            Slot.GridLocation = FIntPoint(-1, -1);
+            Slot.bIsRotated = false;
+            Slot.CurrentDurability = 0.0f;
+            Slot.ExpirationTimestamp = 0.0;
+        }
+        
+        bGridCacheDirty = true;
+        InventoryArray.MarkItemDirty(Slot);
+        OnRep_Inventory();
+    }
 }
 
 bool UDualNodeInventoryComponent::Server_DropFromSlot_Validate(int32 SlotIndex, int32 Amount) { return InventoryArray.Items.IsValidIndex(SlotIndex) && Amount > 0; }

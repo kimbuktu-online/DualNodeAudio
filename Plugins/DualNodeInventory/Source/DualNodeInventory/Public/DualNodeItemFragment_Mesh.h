@@ -4,6 +4,9 @@
 #include "DualNodeItemFragment.h"
 #include "DualNodeItemFragment_Mesh.generated.h"
 
+class UStaticMesh;
+class USkeletalMesh;
+
 UCLASS()
 class DUALNODEINVENTORY_API UDualNodeItemFragment_Mesh : public UDualNodeItemFragment
 {

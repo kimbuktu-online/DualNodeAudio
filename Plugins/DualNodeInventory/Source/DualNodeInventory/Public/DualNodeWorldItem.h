@@ -6,6 +6,8 @@
 #include "DualNodeInteractionInterface.h" // Zwingend erforderlich
 #include "DualNodeWorldItem.generated.h"
 
+class UStaticMeshComponent;
+
 /**
  * Der Master Pickup Actor für die Spielwelt.
  */

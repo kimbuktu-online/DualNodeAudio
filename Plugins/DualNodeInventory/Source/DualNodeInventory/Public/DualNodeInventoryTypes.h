@@ -4,6 +4,8 @@
 #include "Engine/DataAsset.h"
 #include "DualNodeInventoryTypes.generated.h"
 
+class UTexture2D;
+
 /** Bestimmt, wie das Inventar intern validiert und im UI dargestellt wird */
 UENUM(BlueprintType)
 enum class EDualNodeInventoryType : uint8
@@ -47,13 +49,13 @@ struct FDualNodeItemSaveData
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadWrite)
+	UPROPERTY(BlueprintReadWrite, Category = "SaveData")
 	FPrimaryAssetId ItemId;
 
-	UPROPERTY(BlueprintReadWrite)
+	UPROPERTY(BlueprintReadWrite, Category = "SaveData")
 	int32 StackCount = 0;
 
-	UPROPERTY(BlueprintReadWrite)
+	UPROPERTY(BlueprintReadWrite, Category = "SaveData")
 	FGuid InstanceGuid;
 };
 
@@ -63,7 +65,7 @@ struct FDualNodeInventorySaveData
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadWrite)
+	UPROPERTY(BlueprintReadWrite, Category = "SaveData")
 	TArray<FDualNodeItemSaveData> SavedItems;
 };
 

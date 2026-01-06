@@ -4,6 +4,8 @@
 #include "DualNodeItemFragment_Durability.h"
 #include "DualNodeItemFragment_UseAction.h"
 #include "Engine/AssetManager.h"
+#include "Engine/World.h"
+#include "Engine/Texture2D.h"
 
 void UDualNodeInventorySlotViewModel::UpdateSlot(const FDualNodeItemInstance& ItemInstance, int32 InSlotIndex, UDualNodeInventoryComponent* InInventory)
 {

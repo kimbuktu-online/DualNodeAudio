@@ -4,6 +4,7 @@
 #include "Engine/DeveloperSettings.h"
 #include "GameplayTagContainer.h"
 #include "DualNodeInventoryTypes.h"
+#include "Engine/EngineTypes.h"
 #include "DualNodeInventorySettings.generated.h"
 
 /**

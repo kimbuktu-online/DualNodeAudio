@@ -3,7 +3,11 @@
 #include "CoreMinimal.h"
 #include "DualNodeItemFragment.h"
 #include "GameplayTagContainer.h"
+#include "Animation/AnimInstance.h"
 #include "DualNodeItemFragment_Equipment.generated.h"
+
+class USkeletalMesh;
+class UStaticMesh;
 
 UCLASS(meta=(DisplayName="Fragment: Equipment Visuals"))
 class DUALNODEINVENTORY_API UDualNodeItemFragment_Equipment : public UDualNodeItemFragment
