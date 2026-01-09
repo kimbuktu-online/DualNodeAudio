@@ -55,7 +55,7 @@ void UDualNodeEquipmentComponent::EquipItem(const UDualNodeItemDefinition* ItemD
 void UDualNodeEquipmentComponent::UnequipSlot(FGameplayTag SlotTag)
 {
 	// Item aus der Map entfernen
-	const UDualNodeItemDefinition* OldItem = nullptr;
+	TObjectPtr<const UDualNodeItemDefinition> OldItem = nullptr;
 	EquippedItems.RemoveAndCopyValue(SlotTag, OldItem);
 
 	// Skeletal Meshes entfernen
