@@ -36,11 +36,15 @@ public:
 	UPROPERTY(EditAnywhere, Instanced, Category="Inventory|Config")
 	TArray<TObjectPtr<UDualNodeInventoryValidator>> Validators;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory|Config")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Inventory|Config", meta=(ExposeOnSpawn=true))
 	int32 MaxSlotCount = 20;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Inventory|Config")
 	int32 HUDSlotCount = 5;
+
+	/** Passt die Anzahl der Slots zur Laufzeit an (z.B. durch einen Rucksack). Nur auf dem Server! */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Inventory")
+	void SetMaxSlotCount(int32 NewSlotCount);
 
 	// --- LOGIK API ---
 

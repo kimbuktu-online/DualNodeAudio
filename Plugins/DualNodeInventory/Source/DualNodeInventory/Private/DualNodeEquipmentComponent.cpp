@@ -19,41 +19,45 @@ void UDualNodeEquipmentComponent::EquipItem(const UDualNodeItemDefinition* ItemD
 	
 	if (!EquipFrag || !EquipFrag->SlotTag.IsValid()) return;
 
-	// 1. Alten Slot räumen
+	// 1. Alten Slot räumen (löst auch Event aus)
 	UnequipSlot(EquipFrag->SlotTag);
 
 	USkeletalMeshComponent* ParentMesh = GetParentMesh();
 	if (!ParentMesh) return;
 
-	// 2. FALL A: Skinned Mesh (Rüstung/Kleidung)
+	// 2. Item in der Map speichern
+	EquippedItems.Add(EquipFrag->SlotTag, ItemDef);
+
+	// 3. FALL A: Skinned Mesh (Rüstung/Kleidung)
 	if (EquipFrag->EquipmentMesh != nullptr)
 	{
 		USkeletalMeshComponent* NewComp = NewObject<USkeletalMeshComponent>(GetOwner());
 		NewComp->SetSkeletalMesh(EquipFrag->EquipmentMesh.Get());
 		NewComp->SetupAttachment(ParentMesh);
-		
-		// Synchronisation mit dem Haupt-Mesh (Wichtig für Animationen)
 		NewComp->SetLeaderPoseComponent(ParentMesh);
-		
 		NewComp->RegisterComponent();
 		EquippedSkeletalMeshes.Add(EquipFrag->SlotTag, NewComp);
 	}
-	
-	// 3. FALL B: Statisches Mesh (Waffen/Werkzeuge am Socket)
+	// 4. FALL B: Statisches Mesh (Waffen/Werkzeuge am Socket)
 	else if (EquipFrag->StaticMesh != nullptr)
 	{
 		UStaticMeshComponent* NewWeapon = NewObject<UStaticMeshComponent>(GetOwner());
 		NewWeapon->SetStaticMesh(EquipFrag->StaticMesh.Get());
 		NewWeapon->SetupAttachment(ParentMesh, EquipFrag->AttachmentSocket);
 		NewWeapon->RegisterComponent();
-		
-		// Korrektur: Die neue Komponente in der korrekten Map speichern
 		EquippedStaticMeshes.Add(EquipFrag->SlotTag, NewWeapon);
 	}
+
+	// 5. Event auslösen
+	OnEquipmentChanged.Broadcast(EquipFrag->SlotTag, ItemDef);
 }
 
 void UDualNodeEquipmentComponent::UnequipSlot(FGameplayTag SlotTag)
 {
+	// Item aus der Map entfernen
+	const UDualNodeItemDefinition* OldItem = nullptr;
+	EquippedItems.RemoveAndCopyValue(SlotTag, OldItem);
+
 	// Skeletal Meshes entfernen
 	if (TObjectPtr<USkeletalMeshComponent>* FoundCompPtr = EquippedSkeletalMeshes.Find(SlotTag))
 	{
@@ -64,7 +68,7 @@ void UDualNodeEquipmentComponent::UnequipSlot(FGameplayTag SlotTag)
 		EquippedSkeletalMeshes.Remove(SlotTag);
 	}
 
-	// Korrektur: Static Meshes entfernen
+	// Static Meshes entfernen
 	if (TObjectPtr<UStaticMeshComponent>* FoundStaticCompPtr = EquippedStaticMeshes.Find(SlotTag))
 	{
 		if (UStaticMeshComponent* Comp = FoundStaticCompPtr->Get())
@@ -73,6 +77,21 @@ void UDualNodeEquipmentComponent::UnequipSlot(FGameplayTag SlotTag)
 		}
 		EquippedStaticMeshes.Remove(SlotTag);
 	}
+
+	// Event nur auslösen, wenn tatsächlich ein Item entfernt wurde
+	if (OldItem)
+	{
+		OnEquipmentChanged.Broadcast(SlotTag, nullptr);
+	}
+}
+
+const UDualNodeItemDefinition* UDualNodeEquipmentComponent::GetEquippedItemForSlot(FGameplayTag SlotTag) const
+{
+	if (const TObjectPtr<const UDualNodeItemDefinition>* FoundItem = EquippedItems.Find(SlotTag))
+	{
+		return FoundItem->Get();
+	}
+	return nullptr;
 }
 
 USkeletalMeshComponent* UDualNodeEquipmentComponent::GetParentMesh() const

@@ -26,10 +26,7 @@ void UDualNodeInventoryComponent::BeginPlay()
 	Super::BeginPlay();
 	if (GetOwner() && GetOwner()->HasAuthority() && InventoryArray.Items.Num() == 0)
 	{
-		for (int32 i = 0; i < MaxSlotCount; i++)
-		{
-			InventoryArray.Items.Add(FDualNodeItemInstance());
-		}
+		InventoryArray.Items.SetNum(MaxSlotCount);
 		InventoryArray.MarkArrayDirty();
 	}
 }
@@ -38,6 +35,19 @@ void UDualNodeInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimePro
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(UDualNodeInventoryComponent, InventoryArray);
+}
+
+void UDualNodeInventoryComponent::SetMaxSlotCount(int32 NewSlotCount)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return;
+	}
+
+	MaxSlotCount = NewSlotCount;
+	InventoryArray.Items.SetNum(MaxSlotCount);
+	InventoryArray.MarkArrayDirty();
+	OnRep_Inventory();
 }
 
 bool UDualNodeInventoryComponent::Server_SwapSlots_Validate(int32 From, int32 To)
