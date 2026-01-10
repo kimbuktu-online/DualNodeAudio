@@ -4,9 +4,14 @@
 
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
-#include "Interfaces/OnlineSessionInterface.h"
-#include "FindSessionsCallbackProxy.h" // Required for FBlueprintSessionResult
+#include "Interfaces/OnlineSessionInterface.h" // Re-added for IOnlineSession and EOnJoinSessionCompleteResult::Type
+#include "OnlineSessionSettings.h" // Re-added for FOnlineSessionSettings, FOnlineSessionSearchResult
+#include "DualNodeOnlineDelegates.h" // Added to use the custom delegates
 #include "DualNodeCoreGameInstance.generated.h"
+
+// Forward declaration for SteamCorePro session result, or a custom struct
+// USTRUCT(BlueprintType)
+// struct FSteamCoreProSessionResult; // Placeholder for SteamCorePro specific session result
 
 USTRUCT(BlueprintType)
 struct FServerInfo
@@ -25,7 +30,8 @@ struct FServerInfo
 	UPROPERTY(BlueprintReadOnly, Category = "Server Info")
 	int32 Ping;
 
-	FBlueprintSessionResult SessionResult;
+	// Re-added FOnlineSessionSearchResult
+	FOnlineSessionSearchResult SessionResult; 
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnServersFound, const TArray<FServerInfo>&, ServerList);
@@ -47,7 +53,7 @@ public:
 	virtual void Init() override;
 
 	//~================================================================================================================
-	// Session Management
+	// Session Management (will be implemented using SteamCorePro)
 	//~================================================================================================================
 
 	UFUNCTION(BlueprintCallable, Category = "DualNodeCore|Session")
@@ -57,13 +63,13 @@ public:
 	void FindGames(bool bIsLAN);
 
 	UFUNCTION(BlueprintCallable, Category = "DualNodeCore|Session")
-	void JoinGame(const FBlueprintSessionResult& SearchResult);
+	void JoinGame(const FOnlineSessionSearchResult& SearchResult); // Parameter updated for FOnlineSessionSearchResult
 
 	UPROPERTY(BlueprintAssignable, Category = "DualNodeCore|Session")
 	FOnServersFound OnServersFound;
 
 	//~================================================================================================================
-	// Party Management
+	// Party Management (will be implemented using SteamCorePro)
 	//~================================================================================================================
 
 	UFUNCTION(BlueprintCallable, Category = "DualNodeCore|Party")
@@ -79,16 +85,14 @@ public:
 	FOnPartyStateChanged OnPartyStateChanged;
 
 protected:
-	//~================================================================================================================
-	// Session Delegate Handlers
-	//~================================================================================================================
-	
+	// Re-added generic session delegate handlers.
 	void OnCreateSessionComplete(FName SessionName, bool bWasSuccessful);
 	void OnFindSessionsComplete(bool bWasSuccessful);
 	void OnJoinSessionComplete(FName SessionName, EOnJoinSessionCompleteResult::Type Result);
 	void OnDestroySessionComplete(FName SessionName, bool bWasSuccessful);
 
 private:
+	// Re-added generic Online Subsystem session interface and search object.
 	TSharedPtr<class IOnlineSession, ESPMode::ThreadSafe> SessionInterface;
 	TSharedPtr<class FOnlineSessionSearch> SessionSearch;
 };

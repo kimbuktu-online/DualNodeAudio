@@ -3,7 +3,7 @@
 #include "DualNodeUIBlueprintLibrary.h"
 #include "GameFramework/PlayerState.h"
 #include "Engine/Texture2D.h"
-#include "DualNodeCore/Public/DualNodeSteamFriendsSubsystem.h" // Include the new subsystem
+#include "DualNodeCore/Public/DualNodeOnlineFriendsProvider.h" // Updated include for the provider
 #include "DualNodeCore/Public/IDualNodeOnlineFriendsInterface.h" // Include the new interface
 
 UTexture2D* UDualNodeUIBlueprintLibrary::GetSteamAvatar(APlayerState* PlayerState)
@@ -13,11 +13,11 @@ UTexture2D* UDualNodeUIBlueprintLibrary::GetSteamAvatar(APlayerState* PlayerStat
 		return nullptr;
 	}
 
-	// Get the DualNodeSteamFriendsSubsystem from the GameInstance
+	// Get the DualNodeOnlineFriendsProvider from the GameInstance
 	if (UGameInstance* GameInstance = PlayerState->GetGameInstance())
 	{
 		// Use the interface to get the avatar, casting the subsystem to the interface type
-		if (IDualNodeOnlineFriendsInterface* OnlineFriendsInterface = GameInstance->GetSubsystem<UDualNodeSteamFriendsSubsystem>())
+		if (IDualNodeOnlineFriendsInterface* OnlineFriendsInterface = GameInstance->GetSubsystem<UDualNodeOnlineFriendsProvider>())
 		{
 			return OnlineFriendsInterface->GetMediumFriendAvatarForUniqueNetId(PlayerState->GetUniqueId());
 		}

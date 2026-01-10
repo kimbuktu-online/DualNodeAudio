@@ -23,7 +23,7 @@
 
 
 #include "Kismet/GameplayStatics.h"
-#include "FindSessionsCallbackProxy.h"
+// Removed: #include "FindSessionsCallbackProxy.h" // Not directly used anymore, FOnlineSessionSearchResult is sufficient
 
 UDualNodeCoreGameInstance::UDualNodeCoreGameInstance()
 {
@@ -43,6 +43,14 @@ void UDualNodeCoreGameInstance::Init()
 			SessionInterface->OnJoinSessionCompleteDelegates.AddUObject(this, &UDualNodeCoreGameInstance::OnJoinSessionComplete);
 			SessionInterface->OnDestroySessionCompleteDelegates.AddUObject(this, &UDualNodeCoreGameInstance::OnDestroySessionComplete);
 		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("Online Subsystem Session Interface is not valid!"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("Online Subsystem not found!"));
 	}
 }
 
@@ -56,8 +64,13 @@ void UDualNodeCoreGameInstance::HostGame(bool bIsLAN, int32 MaxPlayers, const FS
 		SessionSettings.bShouldAdvertise = true;
 		SessionSettings.bUsesPresence = true;
 		SessionSettings.Set(SETTING_SESSION_NAME, ServerName, EOnlineDataAdvertisementType::ViaOnlineService);
+		SessionSettings.Set(SETTING_GAMEMODE, FString("Lobby"), EOnlineDataAdvertisementType::ViaOnlineService); // Example GameMode setting
 
 		SessionInterface->CreateSession(0, NAME_GameSession, SessionSettings);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SessionInterface not valid, cannot host game."));
 	}
 }
 
@@ -69,16 +82,26 @@ void UDualNodeCoreGameInstance::FindGames(bool bIsLAN)
 		SessionSearch->bIsLanQuery = bIsLAN;
 		SessionSearch->MaxSearchResults = 100;
 		SessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
+		// Optionally, add a search filter for GameMode if needed
+		// SessionSearch->QuerySettings.Set(SETTING_GAMEMODE, FString("Lobby"), EOnlineComparisonOp::Equals);
 
 		SessionInterface->FindSessions(0, SessionSearch.ToSharedRef());
 	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SessionInterface not valid, cannot find games."));
+	}
 }
 
-void UDualNodeCoreGameInstance::JoinGame(const FBlueprintSessionResult& SearchResult)
+void UDualNodeCoreGameInstance::JoinGame(const FOnlineSessionSearchResult& SearchResult)
 {
 	if (SessionInterface.IsValid())
 	{
-		SessionInterface->JoinSession(0, NAME_GameSession, SearchResult.OnlineResult);
+		SessionInterface->JoinSession(0, NAME_GameSession, SearchResult);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SessionInterface not valid, cannot join game."));
 	}
 }
 
@@ -92,8 +115,13 @@ void UDualNodeCoreGameInstance::CreateParty()
 		SessionSettings.bIsLANMatch = false;
 		SessionSettings.bUsesPresence = true; // Allows friends to join via Steam overlay
 		SessionSettings.bAllowJoinViaPresence = true;
+		SessionSettings.Set(SETTING_GAMEMODE, FString("Party"), EOnlineDataAdvertisementType::ViaOnlineService); // Example GameMode setting
 
 		SessionInterface->CreateSession(0, NAME_GameSession, SessionSettings);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SessionInterface not valid, cannot create party."));
 	}
 }
 
@@ -103,15 +131,20 @@ void UDualNodeCoreGameInstance::LeaveParty()
 	{
 		SessionInterface->DestroySession(NAME_GameSession);
 	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SessionInterface not valid, cannot leave party."));
+	}
 }
 
 void UDualNodeCoreGameInstance::StartMatchmaking()
 {
 	// For now, we just re-host a public game. A more advanced implementation
-	// would update the existing session to become public.
+	// would update the existing session to become public or use a matchmaking system.
+	UE_LOG(LogTemp, Log, TEXT("Attempting to start matchmaking by leaving current party and hosting a new game."));
 	LeaveParty();
-	// A short delay might be needed here before hosting again.
-	HostGame(false, 8, TEXT("My Awesome Game"));
+	// A short delay might be needed here before hosting again, or use a delegate for DestroySessionComplete.
+	HostGame(false, 8, TEXT("My Awesome Game")); // Example: Host a public game with 8 players
 }
 
 
@@ -119,7 +152,7 @@ void UDualNodeCoreGameInstance::OnCreateSessionComplete(FName SessionName, bool 
 {
 	if (bWasSuccessful)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Session Created Successfully."));
+		UE_LOG(LogTemp, Log, TEXT("Session Created Successfully. SessionName: %s"), *SessionName.ToString());
 		
 		const UDualNodeCoreSettings* Settings = UDualNodeCoreSettings::Get();
 		if (Settings && Settings->LobbyStartMode != ELobbyStartMode::MainMenuParty)
@@ -153,7 +186,7 @@ void UDualNodeCoreGameInstance::OnFindSessionsComplete(bool bWasSuccessful)
 		for (const FOnlineSessionSearchResult& SearchResult : SessionSearch->SearchResults)
 		{
 			FServerInfo Info;
-			Info.SessionResult.OnlineResult = SearchResult; // Correct assignment
+			Info.SessionResult = SearchResult; // Correct assignment
 			Info.MaxPlayers = SearchResult.Session.SessionSettings.NumPublicConnections;
 			Info.CurrentPlayers = Info.MaxPlayers - SearchResult.Session.NumOpenPublicConnections;
 			Info.Ping = SearchResult.PingInMs;
@@ -183,6 +216,7 @@ void UDualNodeCoreGameInstance::OnJoinSessionComplete(FName SessionName, EOnJoin
 {
 	if (Result == EOnJoinSessionCompleteResult::Success)
 	{
+		UE_LOG(LogTemp, Log, TEXT("Session Joined Successfully. SessionName: %s"), *SessionName.ToString());
 		if (SessionInterface.IsValid())
 		{
 			FString Address;
@@ -190,11 +224,15 @@ void UDualNodeCoreGameInstance::OnJoinSessionComplete(FName SessionName, EOnJoin
 			{
 				GetFirstLocalPlayerController()->ClientTravel(Address, ETravelType::TRAVEL_Absolute);
 			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("Could not get resolved connect string for session %s."), *SessionName.ToString());
+			}
 		}
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Failed to join session."));
+		UE_LOG(LogTemp, Warning, TEXT("Failed to join session. Result: %s"), *UEnum::GetValueAsString(Result));
 	}
 }
 
@@ -202,7 +240,11 @@ void UDualNodeCoreGameInstance::OnDestroySessionComplete(FName SessionName, bool
 {
 	if (bWasSuccessful)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Session destroyed successfully."));
+		UE_LOG(LogTemp, Log, TEXT("Session destroyed successfully. SessionName: %s"), *SessionName.ToString());
 		OnPartyStateChanged.Broadcast();
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to destroy session. SessionName: %s"), *SessionName.ToString());
 	}
 }

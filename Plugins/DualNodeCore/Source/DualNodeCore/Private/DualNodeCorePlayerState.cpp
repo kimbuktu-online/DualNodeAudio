@@ -3,7 +3,7 @@
 #include "DualNodeCorePlayerState.h"
 #include "Net/UnrealNetwork.h"
 #include "LobbyGameMode.h" // Needed to notify the GameMode
-#include "DualNodeCore/Public/DualNodeSteamFriendsSubsystem.h" // Include the subsystem implementation
+#include "DualNodeCore/Public/DualNodeOnlineFriendsProvider.h" // Updated include for the provider
 #include "DualNodeCore/Public/IDualNodeOnlineFriendsInterface.h" // Include the new interface
 
 ADualNodeCorePlayerState::ADualNodeCorePlayerState()
@@ -26,10 +26,10 @@ void ADualNodeCorePlayerState::PostInitializeComponents()
 	// On the server, when the PlayerState is initialized, get the Steam name.
 	if (HasAuthority())
 	{
-		// Get the DualNodeSteamFriendsSubsystem from the GameInstance and cast to the interface
+		// Get the DualNodeOnlineFriendsProvider from the GameInstance and cast to the interface
 		if (UGameInstance* GameInstance = GetGameInstance())
 		{
-			if (IDualNodeOnlineFriendsInterface* OnlineFriendsInterface = GameInstance->GetSubsystem<UDualNodeSteamFriendsSubsystem>())
+			if (IDualNodeOnlineFriendsInterface* OnlineFriendsInterface = GameInstance->GetSubsystem<UDualNodeOnlineFriendsProvider>())
 			{
 				// Use the interface function to get the persona name
 				PlayerSteamName = OnlineFriendsInterface->GetFriendPersonaNameForUniqueNetId(GetUniqueId());
