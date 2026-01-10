@@ -6,68 +6,147 @@
 #include "DualNodeCoreSettings.h"
 #include "GameFramework/GameStateBase.h"
 #include "Kismet/GameplayStatics.h"
+#include "TimerManager.h"
 
 ALobbyGameMode::ALobbyGameMode()
 {
-	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.TickInterval = 1.0f;
+	PrimaryActorTick.bCanEverTick = false;
 
-	CountdownDuration = 10.0f;
+	MinPlayersToStart = 1; // Can be 1 for host-initiated mode
+	CountdownDuration = 10;
 }
 
 void ALobbyGameMode::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
-	CheckIfAllPlayersAreReady();
+	// In PlayerReady mode, a new player joining could change the state.
+	if (const UDualNodeCoreSettings* Settings = UDualNodeCoreSettings::Get())
+	{
+		if (Settings->LobbyStartMode == ELobbyStartMode::PlayerReady)
+		{
+			CheckPlayerReadyStatus();
+		}
+	}
 }
 
 void ALobbyGameMode::Logout(AController* Exiting)
 {
 	Super::Logout(Exiting);
-	CheckIfAllPlayersAreReady();
-}
-
-void ALobbyGameMode::Tick(float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
-	CheckIfAllPlayersAreReady();
-}
-
-void ALobbyGameMode::CheckIfAllPlayersAreReady()
-{
-	if (GetWorld()->GetTimerManager().IsTimerActive(CountdownTimerHandle))
+	// In PlayerReady mode, a player leaving could change the state.
+	if (const UDualNodeCoreSettings* Settings = UDualNodeCoreSettings::Get())
 	{
-		return;
+		if (Settings->LobbyStartMode == ELobbyStartMode::PlayerReady)
+		{
+			CheckPlayerReadyStatus();
+		}
 	}
-	
-	bool bAllPlayersReady = true;
+}
+
+void ALobbyGameMode::OnPlayerReadyStatusChanged()
+{
+	if (const UDualNodeCoreSettings* Settings = UDualNodeCoreSettings::Get())
+	{
+		if (Settings->LobbyStartMode == ELobbyStartMode::PlayerReady)
+		{
+			CheckPlayerReadyStatus();
+		}
+	}
+}
+
+void ALobbyGameMode::RequestStartGame(APlayerController* RequestingPlayer)
+{
+	if (const UDualNodeCoreSettings* Settings = UDualNodeCoreSettings::Get())
+	{
+		if (Settings->LobbyStartMode == ELobbyStartMode::HostInitiatedTimer)
+		{
+			// Check if the requesting player is the host (first player)
+			if (GetWorld()->GetFirstPlayerController() == RequestingPlayer)
+			{
+				if (GetGameState<AGameStateBase>()->PlayerArray.Num() >= MinPlayersToStart)
+				{
+					if (!GetWorld()->GetTimerManager().IsTimerActive(CountdownTimerHandle))
+					{
+						StartGameCountdown();
+					}
+				}
+			}
+		}
+	}
+}
+
+void ALobbyGameMode::CheckPlayerReadyStatus()
+{
+	int32 NumberOfReadyPlayers = 0;
 	for (APlayerState* PS : GetGameState<AGameStateBase>()->PlayerArray)
 	{
 		ADualNodeCorePlayerState* CorePS = Cast<ADualNodeCorePlayerState>(PS);
-		if (!CorePS || !CorePS->IsReady())
+		if (CorePS && CorePS->IsReady())
 		{
-			bAllPlayersReady = false;
-			break;
+			NumberOfReadyPlayers++;
 		}
 	}
 
-	if (bAllPlayersReady && GetGameState<AGameStateBase>()->PlayerArray.Num() > 0)
+	const int32 TotalPlayers = GetGameState<AGameStateBase>()->PlayerArray.Num();
+	const bool bEnoughPlayers = TotalPlayers >= MinPlayersToStart;
+	const bool bAllPlayersReady = NumberOfReadyPlayers == TotalPlayers;
+
+	if (bEnoughPlayers && bAllPlayersReady)
 	{
-		StartGameCountdown();
+		if (!GetWorld()->GetTimerManager().IsTimerActive(CountdownTimerHandle))
+		{
+			StartGameCountdown();
+		}
+	}
+	else
+	{
+		if (GetWorld()->GetTimerManager().IsTimerActive(CountdownTimerHandle))
+		{
+			CancelGameCountdown();
+		}
 	}
 }
 
 void ALobbyGameMode::StartGameCountdown()
 {
-	UE_LOG(LogTemp, Log, TEXT("All players are ready. Starting countdown."));
+	UE_LOG(LogTemp, Log, TEXT("Conditions met. Starting countdown."));
 	
 	ADualNodeCoreGameState* CoreGameState = GetGameState<ADualNodeCoreGameState>();
 	if (CoreGameState)
 	{
 		CoreGameState->SetGamePhase(EGamePhase::PreGameplay);
+		CoreGameState->SetLobbyCountdownTime(CountdownDuration);
 	}
 
-	GetWorld()->GetTimerManager().SetTimer(CountdownTimerHandle, this, &ALobbyGameMode::StartGame, CountdownDuration, false);
+	GetWorld()->GetTimerManager().SetTimer(CountdownTimerHandle, this, &ALobbyGameMode::UpdateCountdown, 1.0f, true);
+}
+
+void ALobbyGameMode::CancelGameCountdown()
+{
+	UE_LOG(LogTemp, Log, TEXT("Conditions no longer met. Cancelling countdown."));
+	GetWorld()->GetTimerManager().ClearTimer(CountdownTimerHandle);
+
+	ADualNodeCoreGameState* CoreGameState = GetGameState<ADualNodeCoreGameState>();
+	if (CoreGameState)
+	{
+		CoreGameState->SetLobbyCountdownTime(0);
+		CoreGameState->SetGamePhase(EGamePhase::Lobby);
+	}
+}
+
+void ALobbyGameMode::UpdateCountdown()
+{
+	ADualNodeCoreGameState* CoreGameState = GetGameState<ADualNodeCoreGameState>();
+	if (CoreGameState)
+	{
+		const int32 NewTime = CoreGameState->GetLobbyCountdownTime() - 1;
+		CoreGameState->SetLobbyCountdownTime(NewTime);
+
+		if (NewTime <= 0)
+		{
+			GetWorld()->GetTimerManager().ClearTimer(CountdownTimerHandle);
+			StartGame();
+		}
+	}
 }
 
 void ALobbyGameMode::StartGame()

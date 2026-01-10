@@ -6,9 +6,11 @@
 #include "GameFramework/PlayerState.h"
 #include "DualNodeCorePlayerState.generated.h"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnPlayerInfoChanged);
+
 /**
  * Base PlayerState class for DualNode projects.
- * Replicates player-specific information.
+ * Replicates player-specific information like ready status and Steam name.
  */
 UCLASS()
 class DUALNODECORE_API ADualNodeCorePlayerState : public APlayerState
@@ -19,6 +21,7 @@ public:
 	ADualNodeCorePlayerState();
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void PostInitializeComponents() override;
 
 	//~================================================================================================================
 	// Lobby Ready State
@@ -30,6 +33,17 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "DualNodeCore|PlayerState")
 	void Server_SetIsReady(bool bReady);
 
+	//~================================================================================================================
+	// Player Info
+	//~================================================================================================================
+
+	UFUNCTION(BlueprintPure, Category = "DualNodeCore|PlayerState")
+	const FString& GetPlayerSteamName() const { return PlayerSteamName; }
+
+	// Delegate broadcast when any player info (name, etc.) changes.
+	UPROPERTY(BlueprintAssignable, Category = "DualNodeCore|PlayerState")
+	FOnPlayerInfoChanged OnPlayerInfoChanged;
+
 protected:
 	UFUNCTION()
 	void OnRep_IsReady();
@@ -37,8 +51,9 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_IsReady)
 	bool bIsReady;
 
-	// Delegate to broadcast ready state changes to UI
-	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnReadyStateChanged, bool, bNewReadyState);
-	UPROPERTY(BlueprintAssignable, Category = "DualNodeCore|PlayerState")
-	FOnReadyStateChanged OnReadyStateChanged;
+	UFUNCTION()
+	void OnRep_PlayerSteamName();
+
+	UPROPERTY(ReplicatedUsing = OnRep_PlayerSteamName)
+	FString PlayerSteamName;
 };

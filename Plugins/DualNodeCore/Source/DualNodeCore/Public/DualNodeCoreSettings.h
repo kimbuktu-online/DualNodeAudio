@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
+#include "DualNodeCoreTypes.h"
 #include "DualNodeCoreSettings.generated.h"
 
 /**
@@ -25,6 +26,10 @@ public:
 	// The map to travel to when the lobby countdown finishes.
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Maps")
 	TSoftObjectPtr<UWorld> GameplayMap;
+
+	// Defines how the lobby countdown is triggered.
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Lobby")
+	ELobbyStartMode LobbyStartMode;
 
 	// Helper function to get the settings instance
 	static const UDualNodeCoreSettings* Get();

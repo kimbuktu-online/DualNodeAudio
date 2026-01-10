@@ -17,6 +17,10 @@
 #ifndef SEARCH_PRESENCE
 #define SEARCH_PRESENCE FName(TEXT("PRESENCE"))
 #endif
+#ifndef SETTING_SESSION_NAME
+#define SETTING_SESSION_NAME FName(TEXT("SESSIONNAME"))
+#endif
+
 
 #include "Kismet/GameplayStatics.h"
 #include "FindSessionsCallbackProxy.h"
@@ -37,6 +41,7 @@ void UDualNodeCoreGameInstance::Init()
 			SessionInterface->OnCreateSessionCompleteDelegates.AddUObject(this, &UDualNodeCoreGameInstance::OnCreateSessionComplete);
 			SessionInterface->OnFindSessionsCompleteDelegates.AddUObject(this, &UDualNodeCoreGameInstance::OnFindSessionsComplete);
 			SessionInterface->OnJoinSessionCompleteDelegates.AddUObject(this, &UDualNodeCoreGameInstance::OnJoinSessionComplete);
+			SessionInterface->OnDestroySessionCompleteDelegates.AddUObject(this, &UDualNodeCoreGameInstance::OnDestroySessionComplete);
 		}
 	}
 }
@@ -50,7 +55,7 @@ void UDualNodeCoreGameInstance::HostGame(bool bIsLAN, int32 MaxPlayers, const FS
 		SessionSettings.NumPublicConnections = MaxPlayers;
 		SessionSettings.bShouldAdvertise = true;
 		SessionSettings.bUsesPresence = true;
-		SessionSettings.Set(SETTING_GAMEMODE, ServerName, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+		SessionSettings.Set(SETTING_SESSION_NAME, ServerName, EOnlineDataAdvertisementType::ViaOnlineService);
 
 		SessionInterface->CreateSession(0, NAME_GameSession, SessionSettings);
 	}
@@ -77,6 +82,39 @@ void UDualNodeCoreGameInstance::JoinGame(const FBlueprintSessionResult& SearchRe
 	}
 }
 
+void UDualNodeCoreGameInstance::CreateParty()
+{
+	if (SessionInterface.IsValid())
+	{
+		FOnlineSessionSettings SessionSettings;
+		SessionSettings.NumPublicConnections = 4; // Example party size
+		SessionSettings.bShouldAdvertise = false; // This is a private party
+		SessionSettings.bIsLANMatch = false;
+		SessionSettings.bUsesPresence = true; // Allows friends to join via Steam overlay
+		SessionSettings.bAllowJoinViaPresence = true;
+
+		SessionInterface->CreateSession(0, NAME_GameSession, SessionSettings);
+	}
+}
+
+void UDualNodeCoreGameInstance::LeaveParty()
+{
+	if (SessionInterface.IsValid())
+	{
+		SessionInterface->DestroySession(NAME_GameSession);
+	}
+}
+
+void UDualNodeCoreGameInstance::StartMatchmaking()
+{
+	// For now, we just re-host a public game. A more advanced implementation
+	// would update the existing session to become public.
+	LeaveParty();
+	// A short delay might be needed here before hosting again.
+	HostGame(false, 8, TEXT("My Awesome Game"));
+}
+
+
 void UDualNodeCoreGameInstance::OnCreateSessionComplete(FName SessionName, bool bWasSuccessful)
 {
 	if (bWasSuccessful)
@@ -84,13 +122,21 @@ void UDualNodeCoreGameInstance::OnCreateSessionComplete(FName SessionName, bool 
 		UE_LOG(LogTemp, Log, TEXT("Session Created Successfully."));
 		
 		const UDualNodeCoreSettings* Settings = UDualNodeCoreSettings::Get();
-		if (Settings && !Settings->LobbyMap.IsNull())
+		if (Settings && Settings->LobbyStartMode != ELobbyStartMode::MainMenuParty)
 		{
-			GetWorld()->ServerTravel(Settings->LobbyMap.ToString() + TEXT("?listen"));
+			if (Settings && !Settings->LobbyMap.IsNull())
+			{
+				GetWorld()->ServerTravel(Settings->LobbyMap.ToString() + TEXT("?listen"));
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("LobbyMap is not set in DualNodeCoreSettings!"));
+			}
 		}
 		else
 		{
-			UE_LOG(LogTemp, Error, TEXT("LobbyMap is not set in DualNodeCoreSettings!"));
+			// We are in MainMenuParty mode, so we stay on the current map.
+			OnPartyStateChanged.Broadcast();
 		}
 	}
 	else
@@ -103,8 +149,29 @@ void UDualNodeCoreGameInstance::OnFindSessionsComplete(bool bWasSuccessful)
 {
 	if (bWasSuccessful && SessionSearch.IsValid())
 	{
-		UE_LOG(LogTemp, Log, TEXT("Found %d sessions."), SessionSearch->SearchResults.Num());
-		// Broadcast results to UI
+		TArray<FServerInfo> ServerInfos;
+		for (const FOnlineSessionSearchResult& SearchResult : SessionSearch->SearchResults)
+		{
+			FServerInfo Info;
+			Info.SessionResult.OnlineResult = SearchResult; // Correct assignment
+			Info.MaxPlayers = SearchResult.Session.SessionSettings.NumPublicConnections;
+			Info.CurrentPlayers = Info.MaxPlayers - SearchResult.Session.NumOpenPublicConnections;
+			Info.Ping = SearchResult.PingInMs;
+			
+			FString ServerName;
+			if (SearchResult.Session.SessionSettings.Get(SETTING_SESSION_NAME, ServerName))
+			{
+				Info.ServerName = ServerName;
+			}
+			else
+			{
+				Info.ServerName = FString("Unnamed Server");
+			}
+			
+			ServerInfos.Add(Info);
+		}
+		
+		OnServersFound.Broadcast(ServerInfos);
 	}
 	else
 	{
@@ -128,5 +195,14 @@ void UDualNodeCoreGameInstance::OnJoinSessionComplete(FName SessionName, EOnJoin
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Failed to join session."));
+	}
+}
+
+void UDualNodeCoreGameInstance::OnDestroySessionComplete(FName SessionName, bool bWasSuccessful)
+{
+	if (bWasSuccessful)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Session destroyed successfully."));
+		OnPartyStateChanged.Broadcast();
 	}
 }

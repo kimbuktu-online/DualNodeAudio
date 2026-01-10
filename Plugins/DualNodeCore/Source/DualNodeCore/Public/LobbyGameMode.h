@@ -21,17 +21,28 @@ public:
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 	virtual void Logout(AController* Exiting) override;
 
-	virtual void Tick(float DeltaSeconds) override;
+	// Called from PlayerState when a player's ready status changes
+	void OnPlayerReadyStatusChanged();
+
+	// Called from PlayerController when a host requests to start the game
+	void RequestStartGame(APlayerController* RequestingPlayer);
 
 protected:
-	void CheckIfAllPlayersAreReady();
+	void CheckPlayerReadyStatus();
 
 	void StartGameCountdown();
 	
+	void UpdateCountdown();
+
+	void CancelGameCountdown();
+
 	void StartGame();
 
 	UPROPERTY(EditDefaultsOnly, Category = "DualNodeCore|Lobby")
-	float CountdownDuration;
+	int32 MinPlayersToStart;
+
+	UPROPERTY(EditDefaultsOnly, Category = "DualNodeCore|Lobby")
+	int32 CountdownDuration;
 
 	FTimerHandle CountdownTimerHandle;
 };

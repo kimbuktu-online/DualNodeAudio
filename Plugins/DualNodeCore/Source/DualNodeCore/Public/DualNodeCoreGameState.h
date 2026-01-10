@@ -7,6 +7,9 @@
 #include "DualNodeCoreTypes.h"
 #include "DualNodeCoreGameState.generated.h"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGamePhaseChanged, EGamePhase, NewPhase);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLobbyCountdownChanged, int32, RemainingTime);
+
 /**
  * Base GameState class for DualNode projects.
  * Replicates the global game state to all clients.
@@ -19,6 +22,8 @@ class DUALNODECORE_API ADualNodeCoreGameState : public AGameState
 public:
 	ADualNodeCoreGameState();
 
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 	//~================================================================================================================
 	// Game Phase Management
 	//~================================================================================================================
@@ -28,17 +33,31 @@ public:
 
 	void SetGamePhase(EGamePhase NewPhase);
 
-protected:
-	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	UPROPERTY(BlueprintAssignable, Category = "DualNodeCore|GameState")
+	FOnGamePhaseChanged OnGamePhaseChanged;
 
+	//~================================================================================================================
+	// Lobby Countdown
+	//~================================================================================================================
+
+	UFUNCTION(BlueprintCallable, Category = "DualNodeCore|GameState")
+	int32 GetLobbyCountdownTime() const { return LobbyCountdownTime; }
+	
+	void SetLobbyCountdownTime(int32 NewTime);
+
+	UPROPERTY(BlueprintAssignable, Category = "DualNodeCore|GameState")
+	FOnLobbyCountdownChanged OnLobbyCountdownChanged;
+
+protected:
 	UFUNCTION()
 	void OnRep_GamePhase();
 
 	UPROPERTY(ReplicatedUsing = OnRep_GamePhase)
 	EGamePhase GamePhase;
 
-	// Delegate to broadcast phase changes to UI and other systems
-	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGamePhaseChanged, EGamePhase, NewPhase);
-	UPROPERTY(BlueprintAssignable, Category = "DualNodeCore|GameState")
-	FOnGamePhaseChanged OnGamePhaseChanged;
+	UFUNCTION()
+	void OnRep_LobbyCountdownTime();
+
+	UPROPERTY(ReplicatedUsing = OnRep_LobbyCountdownTime)
+	int32 LobbyCountdownTime;
 };

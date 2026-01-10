@@ -6,6 +6,7 @@
 #include "DualNodeCorePlayerState.h"
 #include "DualNodeCoreInterfaces.h"
 #include "GameFramework/GameStateBase.h"
+#include "GameFramework/PlayerState.h"
 
 ADualNodeCoreGameMode::ADualNodeCoreGameMode()
 {
@@ -36,9 +37,15 @@ void ADualNodeCoreGameMode::PreLogin(const FString& Options, const FString& Addr
 		}
 	}
 
+	FString UniqueIdString = TEXT("Invalid");
+	if (UniqueId.IsValid() && UniqueId.GetUniqueNetId().IsValid())
+	{
+		UniqueIdString = UniqueId.GetUniqueNetId()->ToString();
+	}
+
 	if (bIsDeveloper)
 	{
-		UE_LOG(LogTemp, Log, TEXT("PreLogin: Developer access granted for %s."), *UniqueId.ToString());
+		UE_LOG(LogTemp, Log, TEXT("PreLogin: Developer access granted for %s."), *UniqueIdString);
 	}
 	else
 	{
@@ -47,15 +54,31 @@ void ADualNodeCoreGameMode::PreLogin(const FString& Options, const FString& Addr
 			ErrorMessage = TEXT("Server is full for public players.");
 			return;
 		}
-		UE_LOG(LogTemp, Log, TEXT("PreLogin: Public access granted for %s."), *UniqueId.ToString());
+		UE_LOG(LogTemp, Log, TEXT("PreLogin: Public access granted for %s."), *UniqueIdString);
 	}
 }
 
 void ADualNodeCoreGameMode::PostLogin(APlayerController* NewPlayer)
 {
+	// First, check if this is a developer and if the DevConnect plugin wants to handle the login.
+	if (NewPlayer)
+	{
+		if (IDualNodeDevConnectInterface* DevConnect = FDualNodeCoreModule::GetDevConnectInterface())
+		{
+			if (DevConnect->IsDeveloper(*NewPlayer->PlayerState->GetUniqueId()))
+			{
+				// The DevConnect plugin will handle spawning the pawn (or not).
+				if (DevConnect->OnDeveloperPostLogin(NewPlayer))
+				{
+					UE_LOG(LogTemp, Log, TEXT("PostLogin: Developer %s handled by DevConnect."), *NewPlayer->GetPlayerState<APlayerState>()->GetPlayerName());
+					// If it was handled, we skip the default pawn spawning.
+					return;
+				}
+			}
+		}
+	}
+	
+	// If not a developer, or if DevConnect didn't handle it, run the default login logic.
 	Super::PostLogin(NewPlayer);
-
-	// TODO: Implement soft check for DualNodeDevConnect here to spawn a spectator pawn.
-	// This will use the same interface-based approach.
-	UE_LOG(LogTemp, Log, TEXT("PostLogin: Player %s has joined."), *NewPlayer->GetPlayerState<APlayerState>()->GetPlayerName());
+	UE_LOG(LogTemp, Log, TEXT("PostLogin: Player %s has joined normally."), *NewPlayer->GetPlayerState<APlayerState>()->GetPlayerName());
 }
